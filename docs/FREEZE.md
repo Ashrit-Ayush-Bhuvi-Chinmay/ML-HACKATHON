@@ -1,10 +1,10 @@
 # Freeze record
 
-Generated 2026-11-18T12:06:35 on the `core-ml` branch, before the evaluator
+Generated 2026-11-18T12:06:53 on the `core-ml` branch, before the evaluator
 test folder was received. Nothing below may change after the evaluator data arrives; the API only
 points `PATHSNAP_EVAL_DIR` at that folder.
 
-- Code commit at freeze time: `c74bcec051857c1ae82f49784300f9b072917558`
+- Code commit at freeze time: `032b02ccd18ec16fc1e4b018c4a9fcc5d752c9a3`
 - Final bundle: `artifacts/pathsnap_model.joblib`  SHA-256 `af093e19ce884a0060b1e2827de318b1eaad84eafb7516139d6e29ff0c87766c`
 - Model: `lightgbm_tuned`; trained on train split, 78 trips, 1,429,277 candidate rows
 - Model parameters: `{"n_estimators": 800, "learning_rate": 0.020297676378643766, "num_leaves": 250, "min_child_samples": 94, "subsample": 0.8199094425189012, "subsample_freq": 1, "colsample_bytree": 0.957522308602883, "reg_lambda": 2.1822435418877868e-08, "reg_alpha": 2.7440553357911863}`
@@ -17,6 +17,23 @@ points `PATHSNAP_EVAL_DIR` at that folder.
 
 ## Student-test rehearsal (full pipeline, exactly as the API runs it)
 
+- Point-weighted Top-1: 0.9472
+- Mean sequence F1: 0.9850; mean coverage F1: 0.9875
+- Mean route continuity: 0.9943
+- Prediction wall time per trip: max 2250 ms; scoring max 410 ms
+
+| trip | points | Top-1 | sequence F1 | coverage F1 | continuity | predict ms |
+|---|---|---|---|---|---|---|
+| 00000000 | 2503 | 0.9588 | 0.9957 | 0.9957 | 0.9888 | 909 |
+| 00000007 | 1354 | 0.9815 | 0.9872 | 0.9872 | 0.9918 | 484 |
+| 00000009 | 1049 | 0.8837 | 0.9635 | 0.9667 | 0.9894 | 811 |
+| 00000040 | 2995 | 0.9773 | 0.9971 | 0.9985 | 0.9934 | 1160 |
+| 00000052 | 262 | 0.9847 | 0.9984 | 0.9984 | 1.0000 | 198 |
+| 00000056 | 3958 | 0.9616 | 0.9751 | 0.9758 | 0.9975 | 2250 |
+| 00000065 | 768 | 0.9245 | 0.9863 | 0.9863 | 0.9924 | 619 |
+| 00000076 | 1486 | 0.9744 | 0.9899 | 0.9899 | 0.9971 | 1564 |
+| 00000077 | 3911 | 0.8998 | 0.9647 | 0.9837 | 0.9929 | 2210 |
+| 00000091 | 874 | 0.9428 | 0.9924 | 0.9924 | 1.0000 | 679 |
 
 ## Every saved model (for the UI history view)
 
