@@ -59,15 +59,17 @@ def align_monotonic(px, py, heading, moving, ax, ay, bx, by,
 
 
 def label_trip(trip: Trip, route: np.ndarray, w_heading: float = 25.0, cap: float = 150.0,
-               min_speed: float = 2.0, k: int = 2) -> dict[str, np.ndarray]:
+               min_speed: float = 2.0, k: int = 2, shift: tuple[float, float] = (0.0, 0.0)) -> dict[str, np.ndarray]:
     """Per-point reference labels for one trip.
 
     Returns arrays of length N: route_pos (index into `route`), arc_id (reference arc),
     dist (metres from the point to that arc), t_on_arc (projection parameter), cos_dir
     (cosine between vehicle heading and arc direction) and speed (m/s).
+    `shift` (metres) applies the same systematic-offset correction the prediction used.
     """
     proj = Projector.for_track(trip.track)
     px, py = proj.to_xy(trip.track[:, 0], trip.track[:, 1])
+    px, py = px + shift[0], py + shift[1]
     heading, speed = track_kinematics(px, py, trip.track[:, 2], k)
     moving = (speed >= min_speed).astype(np.float64)
 

@@ -95,9 +95,11 @@ def _score_candidates(bundle: dict, feats, obs: np.ndarray) -> np.ndarray:
     return model.predict_proba(X)[:, 1]
 
 
-def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None, use_hmm: bool = True) -> dict:
+def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None, use_hmm: bool = True,
+                 offset_correction: bool = False) -> dict:
     """Run the full pipeline on one trip. `model` picks any saved model (default: the final one);
-    `use_hmm=False` returns the classifier-only route, for side-by-side comparison."""
+    `use_hmm=False` returns the classifier-only route, for side-by-side comparison;
+    `offset_correction=False` disables the systematic-GPS-shift check (ablation)."""
     b = bundle or load_model(model)
     hmm_params = b.get("hmm_params") or (load_bundle()["hmm_params"] if ARTIFACT_PATH.exists()
                                          else HMMParams().as_dict())
@@ -108,7 +110,7 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
     trip = load_trip(trip_dir)
     tm["load"] = time.perf_counter() - t
     t = time.perf_counter()
-    ctx = prepare_trip(trip, b["candidate_radius"], b["candidate_k"])
+    ctx = prepare_trip(trip, b["candidate_radius"], b["candidate_k"], offset_correction=offset_correction)
     tm["candidates"] = time.perf_counter() - t
     t = time.perf_counter()
     feats = pair_features(ctx)
@@ -156,6 +158,7 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
         "timings_ms": {k: round(v * 1000, 1) for k, v in tm.items()},
         "model": b["model_name"],
         "hmm": use_hmm,
+        "offset_correction": ctx.offset,
     }
 
 
@@ -169,7 +172,9 @@ def score_trip(trip_dir, prediction: dict) -> dict:
         return {"top1_accuracy": None, "route_precision": None, "route_recall": None, "route_f1": None,
                 "route_mismatch": None, "route_continuity": prediction.get("route_continuity"),
                 "n_points_scored": 0, "note": "no reference route (.route) for this trip; prediction only"}
-    lab = label_trip(trip, ref_route)
+    off = prediction.get("offset_correction") or {}
+    shift = (off.get("dx_m", 0.0), off.get("dy_m", 0.0)) if off.get("applied") else (0.0, 0.0)
+    lab = label_trip(trip, ref_route, shift=shift)
     rel = lab["dist"] <= config.LABEL_MAX_DIST
     pred = np.array([-1 if a is None else a for a in prediction["predicted_arcs"]], dtype=np.int64)
     top1 = float(np.mean(pred[rel] == lab["arc_id"][rel])) if rel.any() else float("nan")

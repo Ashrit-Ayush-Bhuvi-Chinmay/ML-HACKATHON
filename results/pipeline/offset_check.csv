@@ -1,0 +1,9 @@
+split,trip_id,correction,applied,median_nearest_road_m,gps_looks_offset,top1_accuracy,route_f1,route_precision,route_recall,n_points_scored,reference_median_dist_m,dx_m,dy_m,median_after_m
+train,00000054,False,False,83.9,True,0.7626,0.9473,0.9031,0.9961,2144,140.1893,,,
+train,00000054,True,True,83.9,True,0.0708,0.133,0.1034,0.1862,15813,21.7038,228.0,-175.0,3.5
+train,00000033,False,False,7.2,False,0.4758,0.8941,0.8178,0.9862,2394,122.4132,,,
+train,00000033,True,False,7.2,False,0.4758,0.8941,0.8178,0.9862,2394,122.4132,,,
+student_test,00000052,False,False,3.3,False,0.9771,0.9984,1.0,0.9969,262,4.1759,,,
+student_test,00000052,True,False,3.3,False,0.9771,0.9984,1.0,0.9969,262,4.1759,,,
+student_test,00000076,False,False,6.4,False,0.9637,0.9853,0.9726,0.9984,1486,6.8428,,,
+student_test,00000076,True,False,6.4,False,0.9637,0.9853,0.9726,0.9984,1486,6.8428,,,

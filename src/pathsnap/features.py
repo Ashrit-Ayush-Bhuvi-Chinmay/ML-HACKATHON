@@ -58,6 +58,7 @@ class TripContext:
     heading_long_valid: np.ndarray
     net: Network
     cands: Candidates
+    offset: dict  # systematic-shift correction applied to px/py (see estimate_offset)
 
 
 def robust_heading(x, y, t, min_disp: float = 10.0, max_steps: int = 10, max_dt: float = 30.0):
@@ -98,17 +99,65 @@ def _group_reduce(values: np.ndarray, obs: np.ndarray, ufunc) -> np.ndarray:
     return np.repeat(red, counts)
 
 
-def prepare_trip(trip: Trip, radius: float, k_max: int | None, margin: float = 1000.0) -> TripContext:
+OFFSET_TRIGGER_M = 30.0  # every supplied trip but one has median nearest-road distance <= 7.3 m
+
+
+def estimate_offset(net: Network, px, py, max_shift: float = 400.0, n_sample: int = 300):
+    """Label-free check for a systematic GPS shift (train trip 54: whole track ~117 m off the
+    road network). Returns (median nearest-road distance before, after, dx, dy); the shift is a
+    coarse-to-fine grid search minimising the median nearest-road distance of a point sample."""
+    import shapely
+
+    sel = np.unique(np.linspace(0, len(px) - 1, min(n_sample, len(px))).astype(int))
+    sx, sy = px[sel], py[sel]
+
+    def misfit(dx, dy):
+        _, d = net.tree.query_nearest(shapely.points(sx + dx, sy + dy), return_distance=True, all_matches=False)
+        return float(np.median(d)) if len(d) else np.inf
+
+    if len(net.arc_ids) == 0:
+        return np.inf, np.inf, 0.0, 0.0
+    before = misfit(0.0, 0.0)
+    best = (before, 0.0, 0.0)
+    if before <= OFFSET_TRIGGER_M or max_shift <= 0:
+        return before, before, 0.0, 0.0
+    for step, half in ((25.0, max_shift), (5.0, 25.0), (1.0, 5.0)):
+        cx, cy = best[1], best[2]
+        grid = np.arange(-half, half + 1e-9, step)
+        for dx in grid:
+            for dy in grid:
+                m = misfit(cx + dx, cy + dy)
+                if m < best[0]:
+                    best = (m, cx + dx, cy + dy)
+    return before, best[0], best[1], best[2]
+
+
+def prepare_trip(trip: Trip, radius: float, k_max: int | None, margin: float = 1000.0,
+                 offset_correction: bool = False) -> TripContext:
+    """offset_correction is OFF by default: on the one real case (train 54) the grid search
+    found a shift that fits the wrong streets of a dense grid (route F1 0.947 -> 0.133,
+    results/pipeline/offset_check.csv). The misfit diagnostic is always reported."""
     proj = Projector.for_track(trip.track)
     px, py = proj.to_xy(trip.track[:, 0], trip.track[:, 1])
     t = trip.track[:, 2]
+    net = build_network(trip, proj, px, py, margin=margin)
+    before, after, dx, dy = estimate_offset(net, px, py) if offset_correction else (
+        estimate_offset(net, px, py, max_shift=0.0)[0], None, 0.0, 0.0)
+    offset = {"applied": False,
+              "median_nearest_road_m": round(float(before), 1) if np.isfinite(before) else None,
+              "gps_looks_offset": bool(before > OFFSET_TRIGGER_M)}  # inf (no road at all) -> True
+    if offset_correction and before > OFFSET_TRIGGER_M and after < 0.5 * before:
+        px, py = px + dx, py + dy
+        offset.update(applied=True, dx_m=round(float(dx), 1), dy_m=round(float(dy), 1),
+                      median_after_m=round(float(after), 1))
+        net = build_network(trip, proj, px, py, margin=margin)
     heading, hvalid, speed = robust_heading(px, py, t)
     # long-range heading: direction of travel through a stop (traffic light, queue), where the
     # short-range heading is pure GPS noise; see results/errors (51 % accuracy below 1 m/s)
     heading_long, hvalid_long, _ = robust_heading(px, py, t, min_disp=40.0, max_steps=180, max_dt=180.0)
-    net = build_network(trip, proj, px, py, margin=margin)
     cands = generate(net, px, py, radius=radius, k_max=k_max)
-    return TripContext(trip, proj, px, py, t, heading, hvalid, speed, heading_long, hvalid_long, net, cands)
+    return TripContext(trip, proj, px, py, t, heading, hvalid, speed, heading_long, hvalid_long, net, cands,
+                       offset)
 
 
 def pair_features(ctx: TripContext) -> pd.DataFrame:
