@@ -1,0 +1,78 @@
+{
+  "train_oof_classifier_top1_stage1": 0.9365461447369877,
+  "train_oof_classifier_top1_stage2": 0.9404860719147382,
+  "train_hmm_stage1_R1": {
+    "top1": 0.9542217558586918,
+    "continuity": 0.9917232859789994,
+    "sequence_f1": 0.9532989300670593,
+    "coverage_f1": 0.9655902641236971,
+    "route_mismatch": 0.07503960316655159
+  },
+  "train_hmm_stage2_by_weight": {
+    "0.2": {
+      "top1": 0.9476880027981812,
+      "continuity": 0.9925999013320178,
+      "sequence_f1": 0.9539130920268745,
+      "coverage_f1": 0.9660878432003616,
+      "route_mismatch": 0.0734483941478281
+    },
+    "0.3": {
+      "top1": 0.9451556488282616,
+      "continuity": 0.9920487017020748,
+      "sequence_f1": 0.9532909962395058,
+      "coverage_f1": 0.9648984553739343,
+      "route_mismatch": 0.07588172047433348
+    },
+    "0.5": {
+      "top1": 0.9474501573976915,
+      "continuity": 0.9911416094822209,
+      "sequence_f1": 0.9536389301084555,
+      "coverage_f1": 0.9653077706034303,
+      "route_mismatch": 0.07521611412637087
+    },
+    "0.7": {
+      "top1": 0.9462469394893319,
+      "continuity": 0.9902463423783919,
+      "sequence_f1": 0.9526322363124613,
+      "coverage_f1": 0.9648685497559389,
+      "route_mismatch": 0.07653146603464005
+    },
+    "1.0": {
+      "top1": 0.9439524309199021,
+      "continuity": 0.9888805597201399,
+      "sequence_f1": 0.9485951278678405,
+      "coverage_f1": 0.9630249258821151,
+      "route_mismatch": 0.08061440636902087
+    }
+  },
+  "selected_emission_weight": 0.2,
+  "test_hmm_stage1_R1": {
+    "top1": 0.9517064757225736,
+    "continuity": 0.9977924944812362,
+    "sequence_f1": 0.9888450667421946,
+    "coverage_f1": 0.9907657209570606,
+    "route_mismatch": 0.01867517284495047
+  },
+  "test_hmm_stage2": {
+    "top1": 0.9542674959494067,
+    "continuity": 0.9977987421383647,
+    "sequence_f1": 0.9905553069109077,
+    "coverage_f1": 0.9920955218595487,
+    "route_mismatch": 0.016001065082619982
+  },
+  "stage2_top_features": {
+    "rank_self": 3709619.0,
+    "p_self": 3183134.0,
+    "gap_to_best": 648194.0,
+    "best_is_a_+1": 211257.0,
+    "arc_len": 121969.0,
+    "p_same_+1": 51532.0,
+    "t_on_arc": 47147.0,
+    "p_same_-1": 42932.0,
+    "best_is_a_-1": 42745.0,
+    "cos_heading_long": 37961.0,
+    "p_same_+5": 26566.0,
+    "beyond_end_m": 26161.0
+  },
+  "minutes": 4.6
+}

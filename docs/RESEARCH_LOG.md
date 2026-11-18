@@ -69,6 +69,32 @@ Results (`results/research/r2_summary.json`, `r2_label_stats.csv`):
   are not label noise — they are genuinely ambiguous positions near intersections and direction
   choices when the vehicle is stopped.
 
+### Rejected idea — U-turn / sharp-turn penalty (not run)
+
+Proposed to target wrong-direction errors; rejected before running: in India many right turns are
+blocked and drivers legitimately U-turn past them, so penalising U-turns would encode a false
+driving assumption into the transition model.
+
+### R3 — two-stage (stacked) scoring (~14:15–14:25)
+
+Script `scripts/r3_two_stage.py`. Stage 1 = the submitted tuned LightGBM (existing OOF / test
+probabilities, no retraining). Stage 2 adds what neighbouring points (i±1, ±2, ±5) think: stage-1
+probability of the same arc there, whether their top arc is this arc or touches it, plus the
+candidate's own rank and gap to the best. Stage-2 CV uses the same 5 trip-grouped folds as stage 1
+(no leakage). Decoded with the R1 decoder; emission weight re-checked on train (0.2–1.0) because
+stage 2 already contains neighbour context. Compared on the same 20 train trips as R1, then
+student-test once.
+
+Results (`results/research/r3_summary.json`):
+- Classifier only, train OOF Top-1: 0.9365 → **0.9405** (stage 2 helps the classifier).
+- After the HMM, train (20 trips, selection evidence): stage 1 + R1 decoder **0.9542** vs stage 2
+  best 0.9477 (emission weight 0.2; 0.3–1.0 were 0.944–0.947). Route mismatch 0.0750 → 0.0734.
+- Student-test: Top-1 0.9517 → 0.9543, sequence F1 0.9888 → 0.9906, mismatch 0.0187 → 0.0160.
+- **Verdict: not adopted.** Train and student-test disagree on Top-1, and the rule is to select on
+  train. Explanation: stage 2 and the HMM both use neighbouring points, so stacking them double-counts
+  the same evidence (hence the lowest emission weight winning); the classifier gain does not survive
+  decoding. Route mismatch improved slightly on both splits — a lead, not a result.
+
 ## Current best (research candidate)
 
 R1 decoder settings with the frozen trained model: student-test Top-1 0.9517, sequence F1 0.9888,
