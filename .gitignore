@@ -14,6 +14,9 @@ Provided Material/
 *.npz
 *.parquet
 
+# CatBoost writes its own training logs into the working directory
+catboost_info/
+
 # secrets
 .env
 *.key
