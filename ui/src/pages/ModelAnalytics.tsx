@@ -101,8 +101,8 @@ function Leaderboard({
                 {dir === -1 ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />}
               </button>
             </th>
-            <th className={th}>Test Seq F1</th>
-            <th className={th}>Test Coverage F1</th>
+            <th className={th}>Test Seq F1 (no HMM)</th>
+            <th className={th}>Test Coverage F1 (no HMM)</th>
             <th className={th}>Infer / 1k pts</th>
             <th className="py-2 pr-4 pl-3 text-right font-medium">Map</th>
           </tr>
@@ -442,7 +442,7 @@ export function ModelAnalytics() {
 
       <Panel
         title="Model leaderboard"
-        description="Every model saved on Laptop 1, from GET /models. Sorted by student-test Top-1; the deployed model is highlighted."
+        description="Every model saved on Laptop 1, from GET /models, scored as a classifier alone (no HMM), so models are compared on equal terms. Sorted by student-test Top-1; the deployed model is highlighted. The deployed system adds the HMM: see 'Classifier versus HMM' below (route sequence F1 about 79.9% to 98.5%)."
         flush
       >
         <Leaderboard
