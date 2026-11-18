@@ -6,9 +6,18 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The raw data lives outside the repo (course material is not redistributed).
-DATA_ROOT = Path(os.environ.get(
-    "PATHSNAP_DATA_ROOT", REPO_ROOT.parent / "Provided Material" / "Student folder"))
+def _find_data_root() -> Path:
+    """The raw data lives outside the repo (course material is not redistributed): the nearest
+    '<ancestor>/Provided Material/Student folder', so any checkout or worktree under the hackathon
+    folder finds it. Override with PATHSNAP_DATA_ROOT."""
+    for parent in REPO_ROOT.parents:
+        cand = parent / "Provided Material" / "Student folder"
+        if cand.is_dir():
+            return cand
+    return REPO_ROOT.parent / "Provided Material" / "Student folder"
+
+
+DATA_ROOT = Path(os.environ.get("PATHSNAP_DATA_ROOT") or _find_data_root())
 CACHE_DIR = Path(os.environ.get("PATHSNAP_CACHE_DIR", REPO_ROOT / "cache"))
 RESULTS_DIR = Path(os.environ.get("PATHSNAP_RESULTS_DIR", REPO_ROOT / "results"))
 
