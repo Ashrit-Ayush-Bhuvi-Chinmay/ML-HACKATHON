@@ -1,0 +1,37 @@
+{
+  "train_old_labels_route": {
+    "top1": 0.9555089192025183,
+    "continuity": 0.9915987150976031,
+    "sequence_f1": 0.9525896893539864,
+    "coverage_f1": 0.9652734252441586,
+    "route_mismatch": 0.0758066063618151
+  },
+  "train_new_labels_route": {
+    "top1": 0.9512836656173487,
+    "continuity": 0.9918568784700802,
+    "sequence_f1": 0.9528516092543742,
+    "coverage_f1": 0.9656452179392534,
+    "route_mismatch": 0.07466023055780638
+  },
+  "train_oof_classifier_top1_model_old_old_def": 0.9362672645243433,
+  "train_oof_classifier_top1_model_old_new_def": 0.9363004788397132,
+  "train_oof_classifier_top1_model_new_old_def": 0.9339422624484486,
+  "train_oof_classifier_top1_model_new_new_def": 0.9399153034958067,
+  "test_old_labels_route": {
+    "top1": 0.9517064757225736,
+    "continuity": 0.9977924944812362,
+    "sequence_f1": 0.9888450667421946,
+    "coverage_f1": 0.9907657209570606,
+    "route_mismatch": 0.01867517284495047
+  },
+  "test_old_labels_top1_new_def": 0.9517064757225736,
+  "test_new_labels_route": {
+    "top1": 0.9515496785658287,
+    "continuity": 0.998108448928121,
+    "sequence_f1": 0.9891618608130429,
+    "coverage_f1": 0.9911290277439587,
+    "route_mismatch": 0.01793364391774939
+  },
+  "test_new_labels_top1_new_def": 0.9600167250300528,
+  "minutes": 13.6
+}
