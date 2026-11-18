@@ -1,0 +1,338 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/barlow/400.css";
+@import "@fontsource/barlow/500.css";
+@import "@fontsource/barlow/600.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "leaflet/dist/leaflet.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  PathSnap design tokens
+  ----------------------
+  The app is dark-only (evaluator presentation on a projector / laptop).
+  Fonts are bundled locally (@fontsource) so the UI works without internet on Laptop 2.
+
+  Type scale (px): 12 / 13 / 14 (body) / 16 / 20 / 26 / 34 / 44
+  Spacing: Tailwind 4px grid. Radius: 6 (controls) / 10 (panels).
+*/
+
+@theme inline {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1rem;
+
+  /* PathSnap semantic colours */
+  --color-base: var(--ps-base);
+  --color-rail: var(--ps-rail);
+  --color-inset: var(--ps-inset);
+  --color-surface: var(--ps-surface);
+  --color-raised: var(--ps-raised);
+  --color-hairline: var(--ps-hairline);
+  --color-ink: var(--ps-ink);
+  --color-ink-muted: var(--ps-ink-muted);
+  --color-ink-faint: var(--ps-ink-faint);
+  --color-gps: var(--ps-gps);
+  --color-unmatched: var(--ps-unmatched);
+  --color-route: var(--ps-route);
+  --color-road: var(--ps-road);
+  --color-extra: var(--ps-extra);
+  --color-ok: var(--ps-ok);
+  --color-warn: var(--ps-warn);
+  --color-err: var(--ps-err);
+  --color-series-1: var(--ps-series-1);
+  --color-series-2: var(--ps-series-2);
+
+  /* shadcn bridge */
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Base palette: layered blue-grey slate, darkest at the navigation rail */
+  --ps-rail: #161d27;        /* sidebar rail */
+  --ps-base: #1c2431;        /* page background */
+  --ps-inset: #171f29;       /* sunken areas: map frame, console */
+  --ps-surface: #242e3c;     /* panels */
+  --ps-raised: #2d3949;      /* hover, raised controls, popovers */
+  --ps-hairline: #3a4759;    /* borders, grid lines */
+  --ps-ink: #eef3f8;         /* primary text (12.3:1 on panels) */
+  --ps-ink-muted: #b0bdcc;   /* secondary text (7.2:1) */
+  --ps-ink-faint: #8796a8;   /* tertiary text, axis ticks (4.5:1) */
+
+  /* Map layers (distinguished by mark type + legend, not colour alone) */
+  --ps-gps: #5c9dff;         /* matched GPS observations: filled points */
+  --ps-unmatched: #e9eef5;   /* unmatched GPS observations: hollow rings */
+  --ps-route: #38d3df;       /* predicted route: cased line, the one accent */
+  --ps-road: #7b889a;        /* road network: hairline */
+  --ps-extra: #b9a4f7;       /* any additional backend layer */
+
+  /* Status (reserved: always with icon + label) */
+  --ps-ok: #5fd394;
+  --ps-warn: #f0b955;
+  --ps-err: #f2707a;
+
+  /* Chart series (validated on #242e3c: CVD dE 18.9, normal dE 21.0) */
+  --ps-series-1: #4a90ec;
+  --ps-series-2: #1ba878;
+
+  /* shadcn tokens mapped onto the PathSnap palette */
+  --background: var(--ps-base);
+  --foreground: var(--ps-ink);
+  --card: var(--ps-surface);
+  --card-foreground: var(--ps-ink);
+  --popover: var(--ps-raised);
+  --popover-foreground: var(--ps-ink);
+  --primary: var(--ps-route);
+  --primary-foreground: #0a2a2e;
+  --secondary: var(--ps-raised);
+  --secondary-foreground: var(--ps-ink);
+  --muted: var(--ps-raised);
+  --muted-foreground: var(--ps-ink-muted);
+  --accent: var(--ps-raised);
+  --accent-foreground: var(--ps-ink);
+  --destructive: var(--ps-err);
+  --border: var(--ps-hairline);
+  --input: var(--ps-hairline);
+  --ring: var(--ps-route);
+  --chart-1: var(--ps-series-1);
+  --chart-2: var(--ps-series-2);
+  --chart-3: var(--ps-ink-faint);
+  --chart-4: var(--ps-hairline);
+  --chart-5: var(--ps-raised);
+  --radius: 0.625rem;
+  --sidebar: var(--ps-rail);
+  --sidebar-foreground: var(--ps-ink);
+  --sidebar-primary: var(--ps-route);
+  --sidebar-primary-foreground: #0a2a2e;
+  --sidebar-accent: var(--ps-raised);
+  --sidebar-accent-foreground: var(--ps-ink);
+  --sidebar-border: var(--ps-hairline);
+  --sidebar-ring: var(--ps-route);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    min-width: 320px;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ps-route);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Numerals: condensed, tabular, used for metric values and trip IDs */
+  .num {
+    font-family: var(--font-display);
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: 0.01em;
+  }
+
+  /* Hatched fill used for "unmatched" (null) observations in the match ribbon */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--ps-ink-faint) 55%, transparent) 0 2px,
+      transparent 2px 6px
+    );
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-feature-settings: normal;
+    letter-spacing: 0;
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ps-hairline) transparent;
+  }
+}
+
+/* Leaflet adjustments for the dark workspace */
+/* Darkened OSM standard tiles: inverted lightness, hue restored, contrast lowered. */
+.ps-tiles-dark {
+  /* Brighter than a plain invert so road casings stay legible under the route overlay. */
+  filter: invert(1) hue-rotate(180deg) brightness(1.02) contrast(0.88) saturate(0.45);
+}
+.leaflet-container {
+  background: var(--ps-inset);
+  font-family: var(--font-sans);
+}
+.leaflet-control-attribution {
+  background: rgb(23 31 41 / 0.85) !important;
+  color: var(--ps-ink-faint) !important;
+  font-size: 11px;
+}
+.leaflet-control-attribution a {
+  color: var(--ps-ink-muted) !important;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--ps-surface);
+  color: var(--ps-ink);
+  border-bottom-color: var(--ps-hairline);
+}
+.leaflet-bar {
+  border: 1px solid var(--ps-hairline) !important;
+  box-shadow: none !important;
+}
+.leaflet-tooltip.ps-tooltip {
+  background: var(--ps-raised);
+  color: var(--ps-ink);
+  border: 1px solid var(--ps-hairline);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.leaflet-tooltip.ps-tooltip::before {
+  display: none;
+}
+.leaflet-control-scale-line {
+  background: rgb(36 46 60 / 0.9);
+  border-color: var(--ps-ink-faint);
+  color: var(--ps-ink-muted);
+  font-size: 11px;
+}
+.ps-coords {
+  background: rgb(36 46 60 / 0.92);
+  border: 1px solid var(--ps-hairline);
+  border-radius: 6px;
+  color: var(--ps-ink-muted);
+  font: 11.5px/1.2 var(--font-mono);
+  padding: 4px 7px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Start / End badges on the map */
+.ps-endpoint {
+  display: inline-block;
+  transform: translate(-50%, -135%);
+  white-space: nowrap;
+  background: var(--ps-ink);
+  color: #16202b;
+  font: 600 11px/1 var(--font-sans);
+  letter-spacing: 0.02em;
+  padding: 3px 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.45);
+}
+.ps-endpoint::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  z-index: -1;
+}
+.ps-endpoint-static {
+  position: relative;
+  transform: none;
+  padding: 2px 4px;
+  font-size: 10px;
+}
+.ps-endpoint-static::after {
+  display: none;
+}
+
+@keyframes ps-indeterminate {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
+
+/* Overview schematic: the single orchestrated entrance on the page */
+.ps-snap-fixes {
+  animation: ps-fade 0.5s ease-out both;
+}
+.ps-snap-route {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ps-draw 1.3s 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.ps-snap-labels {
+  animation: ps-fade 0.5s 1.5s ease-out both;
+}
+@keyframes ps-draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes ps-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ps-snap-route { stroke-dashoffset: 0; }
+  .ps-snap-fixes, .ps-snap-labels { animation-delay: 0s; }
+}
