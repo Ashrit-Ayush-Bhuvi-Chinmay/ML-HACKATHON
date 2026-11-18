@@ -1,0 +1,25 @@
+# environments / build
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+
+# data and caches: the course dataset is not redistributed in this repo
+cache/
+data/
+Provided Material/
+*.npz
+*.parquet
+
+# secrets
+.env
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
