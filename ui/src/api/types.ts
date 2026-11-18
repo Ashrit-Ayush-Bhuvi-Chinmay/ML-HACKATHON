@@ -25,6 +25,8 @@ export interface TripsResponse {
 /** POST /predict request body */
 export interface PredictRequest {
   trip_id: string
+  model?: string | null
+  hmm?: boolean
 }
 
 /** GeoJSON (RFC 7946). Coordinates are [longitude, latitude]. */
@@ -118,4 +120,42 @@ export interface PredictResponse {
 /** FastAPI error body: {"detail": "..."} */
 export interface ApiErrorBody {
   detail: string | unknown
+}
+
+/** GET /models — every saved model and its recorded metrics. Only `name` is guaranteed. */
+export interface ModelInfo {
+  name: string
+  model?: string
+  family?: string
+  description?: string
+  cv_top1?: number | null
+  cv_macro_f1_mean?: number | null
+  test_top1?: number | null
+  test_macro_f1?: number | null
+  test_sequence_f1?: number | null
+  test_coverage_f1?: number | null
+  test_plausible_continuity?: number | null
+  test_log_loss?: number | null
+  infer_ms_per_1k_points?: number | null
+  [key: string]: unknown
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[]
+}
+
+export type ExperimentRow = Record<string, unknown>
+
+/** GET /experiments — comparison tables, HMM ablations and tuning trials. */
+export interface ExperimentsResponse {
+  model_comparison: ExperimentRow[]
+  model_comparison_featureset_v1: ExperimentRow[]
+  hmm_ablation: Record<string, ExperimentRow[]>
+  tuning_trials: Record<string, ExperimentRow[]>
+}
+
+/** Optional POST /predict body fields. */
+export interface PredictOptions {
+  model?: string | null
+  hmm?: boolean
 }

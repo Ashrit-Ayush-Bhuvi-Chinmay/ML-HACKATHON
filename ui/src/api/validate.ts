@@ -6,9 +6,13 @@
  * are returned as warnings and shown next to the result.
  */
 import type {
+  ExperimentRow,
+  ExperimentsResponse,
   Feature,
   FeatureCollection,
   HealthResponse,
+  ModelInfo,
+  ModelsResponse,
   PredictionMetrics,
   PredictResponse,
   TimingsMs,
@@ -150,7 +154,69 @@ export function validatePredict(data: unknown, requestedTripId: string): Validat
       geojson: validateGeojson(data.geojson, ep),
       metrics: validateMetrics(data.metrics, warnings),
       timings_ms: validateTimings(data.timings_ms, warnings),
+      ...(isInt(data.n_route_pieces) ? { n_route_pieces: data.n_route_pieces } : {}),
+      ...(isInt(data.n_unmatched) ? { n_unmatched: data.n_unmatched } : {}),
+      ...(typeof data.model === 'string' ? { model: data.model } : {}),
+      ...(typeof data.hmm === 'boolean' ? { hmm: data.hmm } : {}),
     },
     warnings,
+  }
+}
+
+function optionalNum(v: unknown): number | undefined {
+  return isNum(v) ? v : undefined
+}
+
+const MODEL_STRINGS = ['model', 'family', 'description'] as const
+const MODEL_NUMBERS = [
+  'cv_top1',
+  'cv_macro_f1_mean',
+  'test_top1',
+  'test_macro_f1',
+  'test_sequence_f1',
+  'test_coverage_f1',
+  'test_plausible_continuity',
+  'test_log_loss',
+  'infer_ms_per_1k_points',
+] as const
+
+export function validateModels(data: unknown): ModelsResponse {
+  const ep = 'GET /models'
+  if (!isObj(data) || !Array.isArray(data.models)) throw new InvalidResponseError(ep, '"models" is not a list')
+  const models: ModelInfo[] = []
+  for (const raw of data.models) {
+    if (!isObj(raw) || typeof raw.name !== 'string' || !raw.name) continue
+    const model: ModelInfo = { name: raw.name }
+    for (const key of MODEL_STRINGS) {
+      if (typeof raw[key] === 'string' && raw[key]) model[key] = raw[key] as string
+    }
+    for (const key of MODEL_NUMBERS) {
+      const n = optionalNum(raw[key])
+      if (n !== undefined) model[key] = n
+    }
+    models.push(model)
+  }
+  return { models }
+}
+
+function experimentRows(value: unknown): ExperimentRow[] {
+  return Array.isArray(value) ? value.filter(isObj) : []
+}
+
+function experimentTables(value: unknown): Record<string, ExperimentRow[]> {
+  if (!isObj(value)) return {}
+  const out: Record<string, ExperimentRow[]> = {}
+  for (const [key, rows] of Object.entries(value)) out[key] = experimentRows(rows)
+  return out
+}
+
+export function validateExperiments(data: unknown): ExperimentsResponse {
+  const ep = 'GET /experiments'
+  if (!isObj(data)) throw new InvalidResponseError(ep, 'body is not a JSON object')
+  return {
+    model_comparison: experimentRows(data.model_comparison),
+    model_comparison_featureset_v1: experimentRows(data.model_comparison_featureset_v1),
+    hmm_ablation: experimentTables(data.hmm_ablation),
+    tuning_trials: experimentTables(data.tuning_trials),
   }
 }

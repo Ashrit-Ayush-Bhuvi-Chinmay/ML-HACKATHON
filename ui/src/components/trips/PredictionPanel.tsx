@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ChartColumn, CheckCircle2, CircleDashed, CircleX, FlaskConical, Loader2, Play, Route, Square } from 'lucide-react'
 import { ApiErrorNotice } from '@/components/common/ApiErrorNotice'
@@ -7,6 +7,7 @@ import { Notice } from '@/components/common/Notice'
 import { allMetricsNull, MetricTiles } from '@/components/metrics/MetricTiles'
 import { StageStrip } from '@/components/metrics/StageStrip'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { useNow } from '@/hooks/useNow'
 import { fmtClock, fmtInt, fmtMs, fmtPct, fmtRelative, STAGE_LABELS, STAGE_ORDER } from '@/lib/format'
 import { viewOf } from '@/lib/predictionView'
@@ -98,7 +99,9 @@ function Fact({ label, value, hint }: { label: string; value: ReactNode; hint?: 
 
 /** Inspector for the selected trip: facts, run control, live status, headline results. */
 export function PredictionPanel() {
-  const { selectedTrip, predictions, runPrediction, cancelPrediction, health, batch } = useSession()
+  const { selectedTrip, predictions, runPrediction, cancelPrediction, health, batch, models, modelsStatus } = useSession()
+  const [model, setModel] = useState('default')
+  const [hmm, setHmm] = useState(true)
 
   if (!selectedTrip) {
     return (
@@ -118,6 +121,7 @@ export function PredictionPanel() {
   const offline = health.status !== 'online'
   const view = result ? viewOf(result.response) : null
   const placeholder = view?.placeholder ?? false
+  const modelValue = model === 'default' || models.some((m) => m.name === model) ? model : 'default'
 
   return (
     <div className="flex flex-col gap-3.5 p-4">
@@ -127,6 +131,36 @@ export function PredictionPanel() {
           <StatusPill rec={rec} placeholder={placeholder} />
         </div>
         <p className="num mt-0.5 text-[36px] leading-none font-semibold">{selectedTrip.trip_id}</p>
+      </div>
+
+      <div className="rounded-lg border border-hairline bg-inset px-3 py-2.5 text-[13px]">
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-ink-muted">Model</span>
+          <select
+            value={modelValue}
+            onChange={(e) => setModel(e.target.value)}
+            disabled={running}
+            aria-label="Model"
+            className="h-7 max-w-[190px] rounded border border-hairline bg-surface px-1.5 text-[12.5px] text-ink"
+          >
+            <option value="default">default (deployed)</option>
+            {models
+              .filter((m) => m.name !== 'default')
+              .map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-ink-muted">HMM decoding</span>
+          <span className="flex items-center gap-2">
+            <span className="text-[12px] text-ink-faint">{hmm ? 'on' : 'off'}</span>
+            <Switch size="sm" checked={hmm} onCheckedChange={setHmm} disabled={running} aria-label="HMM decoding" />
+          </span>
+        </label>
+        {modelsStatus === 'error' && <p className="mt-1.5 text-[11.5px] text-ink-faint">GET /models failed; only the deployed default is listed.</p>}
       </div>
 
       <dl className="divide-y divide-hairline/70 rounded-lg border border-hairline bg-inset px-3 py-1 text-[13px]">
@@ -143,6 +177,8 @@ export function PredictionPanel() {
               hint="Points with a non-null predicted arc. A count of the prediction, not an accuracy metric."
             />
             <Fact label="Route arcs" value={fmtInt(result.response.route_arcs.length)} hint="Length of the predicted route, split into pieces at GPS gaps." />
+            <Fact label="Model" value={result.response.model ?? result.model ?? '—'} hint="Model name reported with this prediction." />
+            <Fact label="Decode" value={result.response.hmm === false ? 'Classifier only' : 'HMM + Viterbi'} hint="Whether HMM/Viterbi decoding produced this route." />
             <Fact label="Server time" value={fmtMs(result.response.timings_ms.total)} hint="timings_ms.total reported by the API." />
             <Fact label="Round trip" value={fmtMs(result.roundTripMs)} hint="Measured in this browser, including network transfer." />
             <Fact label="Received" value={`${fmtClock(result.receivedAt)} (${fmtRelative(result.receivedAt)})`} />
@@ -157,7 +193,7 @@ export function PredictionPanel() {
       ) : (
         <Button
           className="h-10 text-[14px] font-semibold"
-          onClick={() => void runPrediction(selectedTrip.trip_id)}
+          onClick={() => void runPrediction(selectedTrip.trip_id, { model: modelValue, hmm })}
           disabled={offline || batch.running}
           title={offline ? 'The API is offline' : batch.running ? 'A batch run is in progress' : undefined}
         >
@@ -168,7 +204,7 @@ export function PredictionPanel() {
 
       {running && rec && <Waiting rec={rec} nPoints={selectedTrip.n_points} />}
       {rec?.status === 'error' && rec.error && (
-        <ApiErrorNotice error={rec.error} onRetry={offline ? undefined : () => void runPrediction(selectedTrip.trip_id)} />
+        <ApiErrorNotice error={rec.error} onRetry={offline ? undefined : () => void runPrediction(selectedTrip.trip_id, { model: modelValue, hmm })} />
       )}
       {rec?.status === 'error' && result && <p className="text-[12.5px] text-ink-faint">Showing the previous successful result.</p>}
 

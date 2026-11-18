@@ -1,6 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { ChartColumn, FileBarChart2, FlaskConical, GitCompareArrows, SlidersHorizontal } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChartColumn } from 'lucide-react'
+import { ApiError } from '@/api/client'
+import { getExperiments } from '@/api/services'
+import type { ExperimentRow, ExperimentsResponse, ModelInfo } from '@/api/types'
 import { EmptyState } from '@/components/common/EmptyState'
 import { InfoTip } from '@/components/common/InfoTip'
 import { Notice } from '@/components/common/Notice'
@@ -12,8 +15,9 @@ import { TimingChart } from '@/components/metrics/TimingChart'
 import { StubNotice } from '@/components/trips/PredictionPanel'
 import { TripContextBar } from '@/components/trips/TripContextBar'
 import { Button } from '@/components/ui/button'
-import { fmtClock, fmtInt, fmtPct } from '@/lib/format'
+import { fmtClock, fmtInt, fmtMs, fmtPct } from '@/lib/format'
 import { viewOf } from '@/lib/predictionView'
+import { cn } from '@/lib/utils'
 import { useSelectedPrediction, useSession } from '@/state/session'
 
 function OutputFacts({ items }: { items: { label: string; value: string; sub: string; hint: string }[] }) {
@@ -33,33 +37,177 @@ function OutputFacts({ items }: { items: { label: string; value: string; sub: st
   )
 }
 
-const NOT_SERVED = [
-  {
-    icon: GitCompareArrows,
-    title: 'Five-model comparison',
-    text: 'Cross-validation and student-test Macro F1, Top-1 accuracy, log loss and inference time for every model tried.',
-    where: 'results/ and report Section 3',
-  },
-  {
-    icon: SlidersHorizontal,
-    title: 'Bayesian optimisation',
-    text: 'Search space, trials, best hyperparameters and tuned versus untuned scores.',
-    where: 'results/ and report Section 4',
-  },
-  {
-    icon: FlaskConical,
-    title: 'Classifier versus HMM',
-    text: 'Classifier-only predictions compared with classifier plus Viterbi decoding.',
-    where: 'Report Section 5',
-  },
-]
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
+
+const ABLATION_ORDER = ['classifier_only', 'classifier_hmm', 'distance_hmm', 'distance_only']
+const ABLATION_LABELS: Record<string, string> = {
+  classifier_only: 'Classifier only',
+  classifier_hmm: 'Classifier + HMM',
+  distance_hmm: 'Distance + HMM',
+  distance_only: 'Distance only',
+}
+
+function Leaderboard({ models, status }: { models: ModelInfo[]; status: 'idle' | 'loading' | 'ready' | 'error' }) {
+  const [dir, setDir] = useState<1 | -1>(-1)
+  const rows = useMemo(
+    () => [...models].sort((a, b) => ((a.test_top1 ?? -1) - (b.test_top1 ?? -1)) * dir),
+    [models, dir],
+  )
+
+  if (status === 'loading' && !models.length) {
+    return <p className="px-4 py-4 text-[13px] text-ink-muted">Loading /models…</p>
+  }
+  if (status === 'error' && !models.length) {
+    return (
+      <div className="px-4 py-4">
+        <Notice tone="warn" title="Could not load the model list">
+          GET /models failed. The picker falls back to the deployed default model.
+        </Notice>
+      </div>
+    )
+  }
+  if (!rows.length) return <p className="px-4 py-4 text-[13px] text-ink-muted">The API returned no models.</p>
+
+  const th = 'px-3 py-2 text-right font-medium whitespace-nowrap'
+  const td = 'px-3 py-2.5 text-right whitespace-nowrap'
+  return (
+    <div className="scroll-thin overflow-x-auto">
+      <table className="w-full min-w-[860px] text-[13px]">
+        <thead className="bg-inset/60 text-[12px] text-ink-faint">
+          <tr className="border-y border-hairline">
+            <th className="py-2 pr-3 pl-4 text-left font-medium">Model</th>
+            <th className={th}>CV Top-1</th>
+            <th className={th} aria-sort={dir === -1 ? 'descending' : 'ascending'}>
+              <button
+                type="button"
+                className="inline-flex flex-row-reverse items-center gap-1 text-ink hover:text-ink-muted"
+                onClick={() => setDir((d) => (d === -1 ? 1 : -1))}
+              >
+                Test Top-1
+                {dir === -1 ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />}
+              </button>
+            </th>
+            <th className={th}>Test Seq F1</th>
+            <th className={th}>Test Coverage F1</th>
+            <th className={th}>Infer / 1k pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => {
+            const deployed = m.name === 'default'
+            const family = text(m.family) ?? text(m.description) ?? text(m.model)
+            return (
+              <tr key={m.name} className={cn('border-b border-hairline/50 last:border-0', deployed && 'bg-route/[0.06]')}>
+                <td className="py-2.5 pr-3 pl-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="num text-[14px] font-semibold">{m.name}</span>
+                    {deployed && <span className="rounded border border-route/45 px-1 text-[10.5px] text-route">deployed</span>}
+                  </div>
+                  {family && <p className="text-[11.5px] leading-tight text-ink-faint">{family}</p>}
+                </td>
+                <td className={cn(td, 'text-ink-muted')}>{fmtPct(num(m.cv_top1))}</td>
+                <td className={cn(td, num(m.test_top1) === null ? 'text-ink-faint' : 'font-semibold text-ink')}>{fmtPct(num(m.test_top1))}</td>
+                <td className={cn(td, num(m.test_sequence_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(m.test_sequence_f1))}</td>
+                <td className={cn(td, num(m.test_coverage_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(m.test_coverage_f1))}</td>
+                <td className={cn(td, 'text-ink-muted')}>{fmtMs(num(m.infer_ms_per_1k_points))}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Ablation({ tables }: { tables: Record<string, ExperimentRow[]> }) {
+  const keys = useMemo(() => Object.keys(tables), [tables])
+  const [model, setModel] = useState('')
+  useEffect(() => {
+    if (!keys.length) return
+    if (!keys.includes(model)) setModel(keys.includes('lightgbm_tuned') ? 'lightgbm_tuned' : keys[0])
+  }, [keys, model])
+
+  const rows = useMemo(() => {
+    const list = [...(tables[model] ?? [])]
+    const rank = (v: unknown) => {
+      const i = ABLATION_ORDER.indexOf(String(v))
+      return i === -1 ? ABLATION_ORDER.length : i
+    }
+    return list.sort((a, b) => rank(a.variant) - rank(b.variant))
+  }, [tables, model])
+
+  if (!keys.length) return <p className="px-4 py-4 text-[13px] text-ink-muted">The API returned no HMM ablation tables.</p>
+
+  const th = 'px-3 py-2 text-right font-medium whitespace-nowrap'
+  const td = 'px-3 py-2.5 text-right whitespace-nowrap'
+  return (
+    <div>
+      {keys.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+          <span className="text-[12.5px] text-ink-muted">Model</span>
+          <Segmented
+            label="Ablation model"
+            size="xs"
+            value={model}
+            onChange={setModel}
+            options={keys.map((k) => ({ value: k, label: k }))}
+          />
+        </div>
+      )}
+      <div className="scroll-thin overflow-x-auto">
+        <table className="w-full min-w-[720px] text-[13px]">
+          <thead className="bg-inset/60 text-[12px] text-ink-faint">
+            <tr className="border-y border-hairline">
+              <th className="py-2 pr-3 pl-4 text-left font-medium">Variant</th>
+              <th className={th}>Top-1</th>
+              <th className={th}>Seq F1</th>
+              <th className={th}>Coverage F1</th>
+              <th className={th}>Continuity</th>
+              <th className={th}>Mismatch</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => {
+              const variant = String(row.variant ?? `run ${i + 1}`)
+              return (
+                <tr key={`${variant}-${i}`} className="border-b border-hairline/50 last:border-0">
+                  <td className="py-2.5 pr-3 pl-4 text-ink">{ABLATION_LABELS[variant] ?? variant}</td>
+                  <td className={cn(td, num(row.top1) === null ? 'text-ink-faint' : 'font-semibold text-ink')}>{fmtPct(num(row.top1))}</td>
+                  <td className={cn(td, num(row.sequence_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(row.sequence_f1))}</td>
+                  <td className={cn(td, num(row.coverage_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(row.coverage_f1))}</td>
+                  <td className={cn(td, num(row.continuity_pooled) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(row.continuity_pooled))}</td>
+                  <td className={cn(td, num(row.route_mismatch) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(row.route_mismatch))}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
 
 export function ModelAnalytics() {
-  const { predictions, trips, selectTrip } = useSession()
+  const { predictions, trips, selectTrip, models, modelsStatus, apiUrl } = useSession()
   const rec = useSelectedPrediction()
   const result = rec?.result
   const view = useMemo(() => (result ? viewOf(result.response) : null), [result])
   const [sessionView, setSessionView] = useState<'chart' | 'table'>('chart')
+  const [experiments, setExperiments] = useState<ExperimentsResponse | null>(null)
+  const [experimentsError, setExperimentsError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setExperimentsError(null)
+    getExperiments(controller.signal)
+      .then(setExperiments)
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.kind === 'cancelled') return
+        setExperimentsError(e instanceof Error ? e.message : 'Could not load GET /experiments.')
+      })
+    return () => controller.abort()
+  }, [apiUrl])
 
   const rows: (SessionRow & { n: number; scored: number | null })[] = useMemo(
     () =>
@@ -215,24 +363,30 @@ export function ModelAnalytics() {
         )}
       </Panel>
 
-      <Panel title="Not served by the API" description="API v0.1 exposes only the deployed model's predictions, so this interface does not show training experiments.">
-        <ul className="grid grid-cols-1 gap-2 md:grid-cols-3">
-          {NOT_SERVED.map(({ icon: Icon, title, text, where }) => (
-            <li key={title} className="rounded-lg border border-dashed border-hairline px-3.5 py-3">
-              <p className="flex items-center gap-2 text-[14px] font-medium text-ink">
-                <Icon className="size-4 text-ink-faint" /> {title}
-              </p>
-              <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">{text}</p>
-              <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-faint">
-                <FileBarChart2 className="size-3.5" /> {where}
-              </p>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 text-[12px] text-ink-faint">
-          Showing these here would need a new read-only API endpoint serving the model team&rsquo;s recorded results. That is a backend
-          enhancement and is not part of API v0.1.
-        </p>
+      <Panel
+        title="Model leaderboard"
+        description="Every model saved on Laptop 1, from GET /models. Sorted by student-test Top-1; the deployed model is highlighted."
+        flush
+      >
+        <Leaderboard models={models} status={modelsStatus} />
+      </Panel>
+
+      <Panel
+        title="Classifier versus HMM"
+        description="From GET /experiments: classifier-only, classifier + HMM, distance-only and distance + HMM on the student-test trips."
+        flush
+      >
+        {experimentsError ? (
+          <div className="px-4 py-4">
+            <Notice tone="warn" title="Could not load the ablation tables">
+              {experimentsError}
+            </Notice>
+          </div>
+        ) : experiments === null ? (
+          <p className="px-4 py-4 text-[13px] text-ink-muted">Loading /experiments…</p>
+        ) : (
+          <Ablation tables={experiments.hmm_ablation} />
+        )}
       </Panel>
     </div>
   )

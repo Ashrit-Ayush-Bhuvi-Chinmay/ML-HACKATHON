@@ -1,8 +1,8 @@
-/** The three endpoints defined in API_CONTRACT.md. */
+/** The endpoints defined in API_CONTRACT.md. */
 import { PREDICT_TIMEOUT_MS } from '@/config'
 import { request } from './client'
-import type { HealthResponse, PredictResponse, TripsResponse } from './types'
-import { validateHealth, validatePredict, validateTrips, type Validated } from './validate'
+import type { ExperimentsResponse, HealthResponse, ModelsResponse, PredictOptions, PredictRequest, PredictResponse, TripsResponse } from './types'
+import { validateExperiments, validateHealth, validateModels, validatePredict, validateTrips, type Validated } from './validate'
 
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return request({ url: '/health', method: 'GET', signal }, validateHealth)
@@ -12,17 +12,36 @@ export function getTrips(signal?: AbortSignal): Promise<TripsResponse> {
   return request({ url: '/trips', method: 'GET', signal }, validateTrips)
 }
 
-export function postPredict(tripId: string, signal?: AbortSignal): Promise<Validated<PredictResponse>> {
+export function getModels(signal?: AbortSignal): Promise<ModelsResponse> {
+  return request({ url: '/models', method: 'GET', signal }, validateModels)
+}
+
+export function getExperiments(signal?: AbortSignal): Promise<ExperimentsResponse> {
+  return request({ url: '/experiments', method: 'GET', signal }, validateExperiments)
+}
+
+export function postPredict(
+  tripId: string,
+  options: PredictOptions = {},
+  signal?: AbortSignal,
+): Promise<Validated<PredictResponse>> {
+  const data: PredictRequest = { trip_id: tripId }
+  if (options.model) data.model = options.model
+  if (options.hmm !== undefined) data.hmm = options.hmm
+  const notes = [`trip ${tripId}`]
+  if (options.model) notes.push(options.model)
+  if (options.hmm === false) notes.push('no HMM')
+
   return request(
     {
       url: '/predict',
       method: 'POST',
-      data: { trip_id: tripId },
+      data,
       headers: { 'Content-Type': 'application/json' },
       timeout: PREDICT_TIMEOUT_MS,
       signal,
-      logNote: `trip ${tripId}`,
+      logNote: notes.join(' · '),
     },
-    (data) => validatePredict(data, tripId),
+    (body) => validatePredict(body, tripId),
   )
 }

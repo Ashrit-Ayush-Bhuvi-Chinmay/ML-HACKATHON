@@ -7,8 +7,8 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, setApiBaseUrl } from '@/api/client'
-import { getHealth, getTrips, postPredict } from '@/api/services'
-import type { HealthResponse, PredictResponse, TripSummary } from '@/api/types'
+import { getHealth, getModels, getTrips, postPredict } from '@/api/services'
+import type { HealthResponse, ModelInfo, PredictOptions, PredictResponse, TripSummary } from '@/api/types'
 import { HEALTH_POLL_MS, resolveApiBaseUrl, saveApiBaseUrl, type ApiUrlSource } from '@/config'
 import { fmtMs } from '@/lib/format'
 import { toast } from '@/lib/toast'
@@ -29,8 +29,20 @@ export interface PredictionResult {
   receivedAt: number
   /** Measured in the browser: request sent -> response parsed. Includes network time. */
   roundTripMs: number
-  /** Model name reported by /health when the prediction ran. */
+  /** Model name reported by the API for this prediction. */
   model: string | null
+}
+
+/** Identity of one stored run of a trip: model + decoder, as reported by the API. */
+export function runKeyOf(result: PredictionResult): string {
+  const model = result.response.model ?? result.model ?? 'unknown'
+  return `${model}|${result.response.hmm === false ? 'classifier' : 'hmm'}`
+}
+
+/** Human label for a stored run, e.g. "distance_gaussian · no HMM". */
+export function runLabelOf(result: PredictionResult): string {
+  const model = result.response.model ?? result.model ?? 'unknown'
+  return `${model} · ${result.response.hmm === false ? 'no HMM' : 'HMM'}`
 }
 
 export interface PredictionRecord {
@@ -87,13 +99,20 @@ interface SessionValue {
   trips: TripsState
   loadTrips: () => void
 
+  /** Saved models from GET /models (leaderboard + picker). */
+  models: ModelInfo[]
+  modelsStatus: 'idle' | 'loading' | 'ready' | 'error'
+  loadModels: () => void
+
   selectedTripId: string | null
   selectTrip: (id: string | null) => void
   selectedTrip: TripSummary | null
 
   predictions: Record<string, PredictionRecord>
-  runPrediction: (tripId: string) => Promise<RunOutcome>
+  runPrediction: (tripId: string, options?: PredictOptions, reuse?: boolean) => Promise<RunOutcome>
   cancelPrediction: (tripId: string) => void
+  /** Every stored successful run of a trip, newest first, keyed by model + decoder. */
+  runsForTrip: (tripId: string) => PredictionResult[]
 
   batch: BatchState
   /** Runs the given trips one after another (sequential keeps the API log readable). */
@@ -125,8 +144,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<HealthState>({ status: 'checking' })
   const [healthChecking, setHealthChecking] = useState(false)
   const [trips, setTrips] = useState<TripsState>({ status: 'idle', trips: [] })
+  const [models, setModels] = useState<ModelInfo[]>([])
+  const [modelsStatus, setModelsStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const [storedTripId, setSelectedTripId] = useState<string | null>(readSelected)
   const [predictions, setPredictions] = useState<Record<string, PredictionRecord>>({})
+  const [runs, setRuns] = useState<Record<string, PredictionResult[]>>({})
   const [batch, setBatch] = useState<BatchState>(IDLE_BATCH)
   const [focusIndex, setFocusIndex] = useState<number | null>(null)
 
@@ -137,10 +159,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const epoch = useRef(0)
   const healthRef = useRef(health)
   const tripsStatusRef = useRef(trips.status)
+  const runsRef = useRef(runs)
   useEffect(() => {
     healthRef.current = health
     tripsStatusRef.current = trips.status
   }, [health, trips.status])
+  useEffect(() => {
+    runsRef.current = runs
+  }, [runs])
+
+  // ---- models -------------------------------------------------------------
+  const loadModels = useCallback(async () => {
+    const myEpoch = epoch.current
+    setModelsStatus('loading')
+    try {
+      const res = await getModels()
+      if (myEpoch !== epoch.current) return
+      setModels(res.models)
+      setModelsStatus('ready')
+    } catch {
+      if (myEpoch !== epoch.current) return
+      setModelsStatus('error')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (health.status === 'online' && (modelsStatus === 'idle' || modelsStatus === 'error')) {
+      void loadModels()
+    }
+  }, [health.status, modelsStatus, loadModels])
 
   // ---- trips --------------------------------------------------------------
   const loadTrips = useCallback(async () => {
@@ -199,7 +246,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // ---- prediction ---------------------------------------------------------
-  const runPrediction = useCallback(async (tripId: string): Promise<RunOutcome> => {
+  const runPrediction = useCallback(async (tripId: string, options: PredictOptions = {}, reuse = false): Promise<RunOutcome> => {
+    if (reuse) {
+      const wantsDefault = !options.model || options.model === 'default'
+      const wantsHmm = options.hmm !== false
+      const stored = (runsRef.current[tripId] ?? []).find(
+        (r) =>
+          (wantsDefault || (r.response.model ?? r.model) === options.model) &&
+          (r.response.hmm !== false) === wantsHmm,
+      )
+      if (stored) {
+        setPredictions((p) => ({ ...p, [tripId]: { status: 'success', startedAt: Date.now(), result: stored } }))
+        return 'success'
+      }
+    }
+
     controllers.current.get(tripId)?.abort()
     const myEpoch = epoch.current
     const controller = new AbortController()
@@ -210,7 +271,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // A newer run of the same trip, or an API address change, makes this run stale: drop its outcome.
     const stale = () => myEpoch !== epoch.current || controllers.current.get(tripId) !== controller
     try {
-      const { value, warnings } = await postPredict(tripId, controller.signal)
+      const { value, warnings } = await postPredict(tripId, options, controller.signal)
       if (stale()) return 'cancelled'
       const h = healthRef.current
       const result: PredictionResult = {
@@ -218,11 +279,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         warnings,
         receivedAt: Date.now(),
         roundTripMs: performance.now() - t0,
-        model: h.status === 'online' ? h.data.model : null,
+        model: value.model ?? (h.status === 'online' ? h.data.model : null),
       }
       setPredictions((p) => ({ ...p, [tripId]: { status: 'success', startedAt, result } }))
+      // Keep every run of this trip, newest first, one entry per model + decoder.
+      setRuns((all) => {
+        const key = runKeyOf(result)
+        const previous = all[tripId] ?? []
+        return { ...all, [tripId]: [result, ...previous.filter((r) => runKeyOf(r) !== key)] }
+      })
       if (!inBatch.current) {
-        toast('success', `Prediction received for trip ${tripId}`, `Server ${fmtMs(value.timings_ms.total)}, round trip ${fmtMs(result.roundTripMs)}.`)
+        toast('success', `Prediction received for trip ${tripId}`, `${runLabelOf(result)} · server ${fmtMs(value.timings_ms.total)}, round trip ${fmtMs(result.roundTripMs)}.`)
       }
       return 'success'
     } catch (e) {
@@ -312,8 +379,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setApiUrlSource(next.source)
     // Results from a different backend would be misleading; start clean.
     setPredictions({})
+    setRuns({})
     setBatch(IDLE_BATCH)
     setTrips({ status: 'idle', trips: [] })
+    setModels([])
+    setModelsStatus('idle')
     setHealth({ status: 'checking' })
     setHealthChecking(false)
     setFocusIndex(null)
@@ -325,6 +395,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [trips.trips, storedTripId],
   )
   const selectedTripId = selectedTrip?.trip_id ?? null
+
+  const runsForTrip = useCallback((tripId: string) => runs[tripId] ?? [], [runs])
 
   const isStubModel = health.data?.model?.toLowerCase() === 'stub'
 
@@ -338,12 +410,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     isStubModel,
     trips,
     loadTrips: () => void loadTrips(),
+    models,
+    modelsStatus,
+    loadModels: () => void loadModels(),
     selectedTripId,
     selectTrip,
     selectedTrip,
     predictions,
     runPrediction,
     cancelPrediction,
+    runsForTrip,
     batch,
     runBatch,
     runAllTrips,
