@@ -24,6 +24,38 @@ GPS point, and an HMM with Viterbi decoding turns those scores into one connecte
 Distance-only baseline on the evaluator trips: Top-1 0.483, sequence F1 0.452.
 Full comparison of 11 models: `results/models/model_comparison.csv`.
 
+## Quick start
+
+```
+python launch.py
+```
+
+| | |
+|---|---|
+| **1 Server** | laptop 1 — pick the trips folder; a popup shows the address for laptop 2 (also copied to the clipboard) |
+| **2 UI** | laptop 2 — enter that address (just the IP is fine); the browser opens by itself |
+| **3 Both** | everything on one laptop |
+| **4 Setup** | install / repair only |
+
+The first run installs whatever that role needs (server: Python 3.12; UI: Node.js ≥ 22.12).
+Choices are remembered for next time. The manual steps below do the same thing.
+
+**Where the server laptop keeps the course data** (only the server needs it): a folder named
+`Provided Material`, with the course's own layout, next to the repo (or inside it — it is
+git-ignored) or a few folders above:
+
+```
+<any folder>\
+├── ML-HACKATHON\              this repository
+└── Provided Material\
+    ├── Student folder\student_test\<trip id>\…
+    └── evaluator_test\<trip id>\…
+```
+
+The launcher then offers both trip sets automatically; anywhere else, choose **b) Browse**.
+If laptop 2 cannot connect, the server window shows the one-time firewall command to run in an
+administrator PowerShell, and a phone hotspot avoids college Wi-Fi blocking laptop-to-laptop traffic.
+
 ## Setup (Windows 10/11)
 
 Needs **Python 3.12** (laptop 1) and **Node.js ≥ 22.12** (laptop 2). The course data folder

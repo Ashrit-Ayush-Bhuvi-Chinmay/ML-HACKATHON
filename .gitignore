@@ -17,6 +17,9 @@ Provided Material/
 # CatBoost writes its own training logs into the working directory
 catboost_info/
 
+# launcher's remembered choices (local paths, API address)
+.launcher.json
+
 # secrets
 .env
 *.key

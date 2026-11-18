@@ -9,7 +9,9 @@
  */
 
 const STORAGE_KEY = 'pathsnap.apiBaseUrl'
-const FALLBACK_URL = 'http://localhost:8000'
+// 127.0.0.1, not localhost: on Windows "localhost" may resolve to IPv6 (::1) first while the API
+// listens on IPv4 only, which made requests time out.
+const FALLBACK_URL = 'http://127.0.0.1:8000'
 
 export type ApiUrlSource = 'saved' | 'env' | 'default'
 
