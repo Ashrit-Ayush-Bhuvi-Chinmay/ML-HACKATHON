@@ -109,10 +109,9 @@ export function PredictionPanel() {
   // Keep the picker in step with the result on screen, including runs started from the map.
   useEffect(() => {
     if (!result?.response.model) return
-    const deployed = health.status === 'online' ? health.data.model : null
-    setModel(result.response.model === deployed ? 'default' : result.response.model)
+    setModel(result.response.model)
     if (typeof result.response.hmm === 'boolean') setHmm(result.response.hmm)
-  }, [result, health])
+  }, [result])
 
   if (!selectedTrip) {
     return (
