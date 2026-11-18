@@ -32,6 +32,7 @@ CONTEXT_OFFSETS = (-5, -2, -1, 1, 2, 5)
 FEATURES = [
     "dist", "t_on_arc", "beyond_end_m", "arc_len",
     "cos_heading", "abs_dheading", "heading_valid", "speed",
+    "cos_heading_long", "heading_long_valid", "cos_gap_long",
     *[f"dist_ctx{o:+d}" for o in CONTEXT_OFFSETS], "dist_ctx_mean", "dist_ctx_max",
     "has_twin", "in_deg_u", "out_deg_v",
     "log_dt_prev", "log_dt_next", "jitter",
@@ -50,6 +51,8 @@ class TripContext:
     heading: np.ndarray
     heading_valid: np.ndarray
     speed: np.ndarray
+    heading_long: np.ndarray
+    heading_long_valid: np.ndarray
     net: Network
     cands: Candidates
 
@@ -97,9 +100,12 @@ def prepare_trip(trip: Trip, radius: float, k_max: int | None, margin: float = 1
     px, py = proj.to_xy(trip.track[:, 0], trip.track[:, 1])
     t = trip.track[:, 2]
     heading, hvalid, speed = robust_heading(px, py, t)
+    # long-range heading: direction of travel through a stop (traffic light, queue), where the
+    # short-range heading is pure GPS noise; see results/errors (51 % accuracy below 1 m/s)
+    heading_long, hvalid_long, _ = robust_heading(px, py, t, min_disp=40.0, max_steps=180, max_dt=180.0)
     net = build_network(trip, proj, px, py, margin=margin)
     cands = generate(net, px, py, radius=radius, k_max=k_max)
-    return TripContext(trip, proj, px, py, t, heading, hvalid, speed, net, cands)
+    return TripContext(trip, proj, px, py, t, heading, hvalid, speed, heading_long, hvalid_long, net, cands)
 
 
 def pair_features(ctx: TripContext) -> pd.DataFrame:
@@ -124,6 +130,9 @@ def pair_features(ctx: TripContext) -> pd.DataFrame:
     f["abs_dheading"] = np.where(hv, np.abs(dth), np.pi / 2)
     f["heading_valid"] = hv.astype(np.float64)
     f["speed"] = ctx.speed[o]
+    hl = ctx.heading_long_valid[o]
+    f["cos_heading_long"] = np.where(hl, np.cos(wrap_angle(ctx.heading_long[o] - net.bearing[a])), 0.0)
+    f["heading_long_valid"] = hl.astype(np.float64)
 
     # context: the same arc seen from neighbouring points
     ctx_d = []
@@ -156,6 +165,7 @@ def pair_features(ctx: TripContext) -> pd.DataFrame:
     f["dist_gap"] = c.dist - _group_reduce(c.dist, o, np.minimum)
     f["ctx_gap"] = f["dist_ctx_mean"] - _group_reduce(f["dist_ctx_mean"], o, np.minimum)
     f["cos_gap"] = _group_reduce(f["cos_heading"], o, np.maximum) - f["cos_heading"]
+    f["cos_gap_long"] = _group_reduce(f["cos_heading_long"], o, np.maximum) - f["cos_heading_long"]
 
     df = pd.DataFrame({k: np.asarray(v, dtype=np.float32) for k, v in f.items()})[FEATURES]
     df.insert(0, "arc_id", c.arc_id.astype(np.int64))

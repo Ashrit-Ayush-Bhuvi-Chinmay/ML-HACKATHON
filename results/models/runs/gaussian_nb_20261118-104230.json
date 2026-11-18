@@ -1,0 +1,121 @@
+{
+  "row": {
+    "model": "gaussian_nb",
+    "family": "Probabilistic (generative)",
+    "config": "{\"var_smoothing\": 1e-09}",
+    "train_point_frac": 1.0,
+    "cv_macro_f1_mean": 0.8544397398600727,
+    "cv_macro_f1_std": 0.01692389093842446,
+    "cv_top1": 0.8627223126044468,
+    "cv_top1_fold_std": 0.024846277923257182,
+    "cv_log_loss": 0.7281336025515016,
+    "test_top1": 0.8507813724977787,
+    "test_macro_f1": 0.8463381901680151,
+    "test_precision": 0.6039921225675089,
+    "test_recall": 0.945995399414471,
+    "test_log_loss": 0.6804497241973877,
+    "test_route_continuity": 0.7703168937777306,
+    "fit_s_full": 0.8322203999996418,
+    "infer_ms_per_1k_points": 3.081466597060154,
+    "seed": 352,
+    "run": "20261118-104230"
+  },
+  "folds": [
+    {
+      "macro_f1": 0.8457054634901419,
+      "precision": 0.6053226173326257,
+      "recall": 0.9475858139866116,
+      "log_loss": 0.7511184215545654,
+      "top1": 0.8622629417768389,
+      "fold": 0,
+      "fit_s": 0.4813026000001628,
+      "predict_s": 0.1360697000000073
+    },
+    {
+      "macro_f1": 0.8335055458517457,
+      "precision": 0.6070601030879085,
+      "recall": 0.8600475664087361,
+      "log_loss": 0.7328159213066101,
+      "top1": 0.8422140024659269,
+      "fold": 1,
+      "fit_s": 0.4848903000001883,
+      "predict_s": 0.19828560000041762
+    },
+    {
+      "macro_f1": 0.8658893278489781,
+      "precision": 0.6705803360795558,
+      "recall": 0.9317213383424523,
+      "log_loss": 0.7694284319877625,
+      "top1": 0.8588392496974586,
+      "fold": 2,
+      "fit_s": 0.42715250000037486,
+      "predict_s": 0.07033020000017132
+    },
+    {
+      "macro_f1": 0.8506246429077994,
+      "precision": 0.6404775169120573,
+      "recall": 0.8934034947489953,
+      "log_loss": 0.7402302026748657,
+      "top1": 0.8563821526036698,
+      "fold": 3,
+      "fit_s": 0.43047260000003007,
+      "predict_s": 0.1304587000004176
+    },
+    {
+      "macro_f1": 0.8764737192016988,
+      "precision": 0.6811212121212121,
+      "recall": 0.9429854002349387,
+      "log_loss": 0.5659589171409607,
+      "top1": 0.9077981458953815,
+      "fold": 4,
+      "fit_s": 0.4379499000006035,
+      "predict_s": 0.054177099999833445
+    }
+  ],
+  "cv_oof": {
+    "macro_f1": 0.8532973803676082,
+    "precision": 0.6376548211598565,
+    "recall": 0.9154973270919314,
+    "log_loss": 0.7281336025515016,
+    "top1": 0.8627223126044468
+  },
+  "test": {
+    "macro_f1": 0.8463381901680151,
+    "precision": 0.6039921225675089,
+    "recall": 0.945995399414471,
+    "log_loss": 0.6804497241973877,
+    "top1": 0.8507813724977787
+  },
+  "features": [
+    "dist",
+    "t_on_arc",
+    "beyond_end_m",
+    "arc_len",
+    "cos_heading",
+    "abs_dheading",
+    "heading_valid",
+    "speed",
+    "dist_ctx-5",
+    "dist_ctx-2",
+    "dist_ctx-1",
+    "dist_ctx+1",
+    "dist_ctx+2",
+    "dist_ctx+5",
+    "dist_ctx_mean",
+    "dist_ctx_max",
+    "has_twin",
+    "in_deg_u",
+    "out_deg_v",
+    "log_dt_prev",
+    "log_dt_next",
+    "jitter",
+    "n_cands",
+    "dist_gap",
+    "ctx_gap",
+    "cos_gap"
+  ],
+  "n_folds": 5,
+  "candidate_radius": 50.0,
+  "candidate_k": 16,
+  "label_max_dist": 50.0
+}

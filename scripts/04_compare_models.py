@@ -126,6 +126,20 @@ def main() -> None:
     table = pd.read_csv(table_path) if table_path.exists() else pd.DataFrame()
 
     for name in args.models:
+        try:
+            table = run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table_path)
+        except Exception as exc:  # keep going: one failing model must not cost the others
+            import traceback
+            traceback.print_exc()
+            print(f"!!! {name} failed: {exc!r}", flush=True)
+
+    cols = ["model", "cv_macro_f1_mean", "cv_top1", "cv_log_loss", "test_top1", "test_macro_f1",
+            "test_log_loss", "test_route_continuity", "infer_ms_per_1k_points"]
+    print("\n" + table[cols].round(4).to_string(index=False))
+
+
+def run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table_path):
+    if True:
         spec = get_spec(name)
         rng = np.random.default_rng(config.SEED)
         print(f"\n=== {name} ({spec.family}) ===", flush=True)
@@ -183,10 +197,7 @@ def main() -> None:
         table = pd.concat([table[table.get("model", pd.Series(dtype=str)) != name] if len(table) else table,
                            pd.DataFrame([row])], ignore_index=True)
         table.to_csv(table_path, index=False)
-
-    cols = ["model", "cv_macro_f1_mean", "cv_top1", "cv_log_loss", "test_top1", "test_macro_f1",
-            "test_log_loss", "test_route_continuity", "infer_ms_per_1k_points"]
-    print("\n" + table[cols].round(4).to_string(index=False))
+    return table
 
 
 if __name__ == "__main__":
