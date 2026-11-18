@@ -487,7 +487,7 @@ export function RouteMap({
           )}
         </div>
 
-        {otherRuns.length > 0 && (
+        {response && (
           <div className="rounded-lg border border-hairline bg-surface/95 text-[13px] shadow-[0_8px_24px_rgb(0_0_0/0.35)] backdrop-blur">
             <button
               type="button"
@@ -501,6 +501,12 @@ export function RouteMap({
             {compareOpen && (
               <div className="border-t border-hairline px-3 pt-2.5 pb-3">
                 <div className="scroll-thin max-h-[26vh] space-y-1 overflow-y-auto pr-1">
+                  {otherRuns.length === 0 && (
+                    <p className="text-[11.5px] leading-snug text-ink-faint">
+                      No other runs of this trip yet. Quick comparison runs the nearest-road baseline and the classifier
+                      without HMM, then draws them behind this route.
+                    </p>
+                  )}
                   {otherRuns.map((run) => {
                     const key = runKeyOf(run)
                     const checked = compareKeys.includes(key)

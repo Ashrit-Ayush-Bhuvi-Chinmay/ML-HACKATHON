@@ -1,0 +1,126 @@
+INFO:     Started server process [30008]
+INFO:     Waiting for application startup.
+2026-11-18 16:04:47,023 | INFO | pathsnap | Starting PathSnap Backend
+2026-11-18 16:04:47,023 | INFO | pathsnap | Environment: development
+2026-11-18 16:04:47,026 | INFO | pathsnap | Device pairing is disabled (PATHSNAP_REQUIRE_AUTH=false)
+2026-11-18 16:04:47,044 | INFO | pathsnap | Loaded 10 trips from C:\Users\ashri\Documents\SEM 5\ML\ML_HACKATHON\Provided Material\Student folder\student_test
+2026-11-18 16:04:47,397 | INFO | pathsnap | Model bundle loaded in 353 ms
+2026-11-18 16:04:48,986 | INFO | pathsnap | WARM-UP trip=00000000 points=2503 total=1472ms
+================================================================
+ PathSnap API
+----------------------------------------------------------------
+ Model        : lightgbm_tuned
+ Trips folder : C:\Users\ashri\Documents\SEM 5\ML\ML_HACKATHON\Provided Material\Student folder\student_test
+ Trips found  : 10
+ API address  : http://10.1.25.21:8000
+                (type this into the UI's API address box)
+ Auth         : disabled
+ Discovery    : off
+================================================================
+
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
+2026-11-18 16:04:49,148 | INFO | pathsnap | GET /health | 200 | 5.62 ms
+INFO:     127.0.0.1:55005 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:07,019 | INFO | pathsnap | GET /health | 200 | 0.88 ms
+INFO:     127.0.0.1:55078 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:07,052 | INFO | pathsnap | GET /trips | 200 | 1.86 ms
+INFO:     127.0.0.1:55078 - "GET /trips HTTP/1.1" 200 OK
+2026-11-18 16:05:07,309 | INFO | pathsnap | GET /health | 200 | 0.52 ms
+INFO:     127.0.0.1:55078 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:07,327 | INFO | pathsnap | GET /trips | 200 | 0.93 ms
+INFO:     127.0.0.1:55078 - "GET /trips HTTP/1.1" 200 OK
+2026-11-18 16:05:07,362 | INFO | pathsnap | GET /models | 200 | 4.87 ms
+INFO:     127.0.0.1:55078 - "GET /models HTTP/1.1" 200 OK
+2026-11-18 16:05:09,607 | INFO | pathsnap | GET /health | 200 | 0.91 ms
+INFO:     127.0.0.1:55078 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:09,632 | INFO | pathsnap | GET /trips | 200 | 1.13 ms
+INFO:     127.0.0.1:55078 - "GET /trips HTTP/1.1" 200 OK
+2026-11-18 16:05:09,673 | INFO | pathsnap | GET /models | 200 | 4.91 ms
+INFO:     127.0.0.1:55078 - "GET /models HTTP/1.1" 200 OK
+2026-11-18 16:05:10,774 | INFO | pathsnap | OPTIONS /predict | 200 | 0.31 ms
+INFO:     127.0.0.1:55078 - "OPTIONS /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:12,262 | INFO | pathsnap | PREDICT trip=00000009 model=default hmm=on points=1049 top1=0.8837 seqF1=0.9635 total=1381ms score=90ms client=127.0.0.1
+2026-11-18 16:05:12,273 | INFO | pathsnap | POST /predict | 200 | 1493.20 ms
+INFO:     127.0.0.1:55078 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:20,342 | INFO | pathsnap | PREDICT trip=00000009 model=distance_gaussian hmm=off points=1049 top1=0.5224 seqF1=0.4900 total=294ms score=111ms client=127.0.0.1
+2026-11-18 16:05:20,361 | INFO | pathsnap | POST /predict | 200 | 991.51 ms
+INFO:     127.0.0.1:55092 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:21,536 | INFO | pathsnap | PREDICT trip=00000009 model=default hmm=off points=1049 top1=0.8637 seqF1=0.8702 total=1047ms score=112ms client=127.0.0.1
+2026-11-18 16:05:21,551 | INFO | pathsnap | POST /predict | 200 | 1181.91 ms
+INFO:     127.0.0.1:55092 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:24,376 | INFO | pathsnap | GET /health | 200 | 0.82 ms
+INFO:     127.0.0.1:55092 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:24,403 | INFO | pathsnap | GET /trips | 200 | 1.05 ms
+INFO:     127.0.0.1:55092 - "GET /trips HTTP/1.1" 200 OK
+2026-11-18 16:05:24,450 | INFO | pathsnap | GET /models | 200 | 6.74 ms
+INFO:     127.0.0.1:55092 - "GET /models HTTP/1.1" 200 OK
+2026-11-18 16:05:24,874 | INFO | pathsnap | GET /experiments | 200 | 78.07 ms
+INFO:     127.0.0.1:55122 - "GET /experiments HTTP/1.1" 200 OK
+2026-11-18 16:05:24,875 | INFO | pathsnap | GET /experiments | 200 | 91.84 ms
+2026-11-18 16:05:29,522 | INFO | pathsnap | PREDICT trip=00000000 model=default hmm=on points=2503 top1=0.9588 seqF1=0.9957 total=1287ms score=90ms client=127.0.0.1
+2026-11-18 16:05:29,541 | INFO | pathsnap | POST /predict | 200 | 1402.27 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:30,180 | INFO | pathsnap | PREDICT trip=00000007 model=default hmm=on points=1354 top1=0.9815 seqF1=0.9872 total=592ms score=37ms client=127.0.0.1
+2026-11-18 16:05:30,190 | INFO | pathsnap | POST /predict | 200 | 643.04 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:31,506 | INFO | pathsnap | PREDICT trip=00000009 model=default hmm=on points=1049 top1=0.8837 seqF1=0.9635 total=1218ms score=81ms client=127.0.0.1
+2026-11-18 16:05:31,518 | INFO | pathsnap | POST /predict | 200 | 1319.10 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:32,982 | INFO | pathsnap | PREDICT trip=00000040 model=default hmm=on points=2995 top1=0.9773 seqF1=0.9971 total=1344ms score=109ms client=127.0.0.1
+2026-11-18 16:05:32,997 | INFO | pathsnap | POST /predict | 200 | 1472.03 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:33,255 | INFO | pathsnap | PREDICT trip=00000052 model=default hmm=on points=262 top1=0.9847 seqF1=0.9984 total=239ms score=12ms client=127.0.0.1
+2026-11-18 16:05:33,257 | INFO | pathsnap | POST /predict | 200 | 255.60 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:36,093 | INFO | pathsnap | PREDICT trip=00000056 model=default hmm=on points=3958 top1=0.9616 seqF1=0.9751 total=2424ms score=395ms client=127.0.0.1
+2026-11-18 16:05:36,116 | INFO | pathsnap | POST /predict | 200 | 2853.46 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:36,736 | INFO | pathsnap | PREDICT trip=00000065 model=default hmm=on points=768 top1=0.9245 seqF1=0.9863 total=586ms score=23ms client=127.0.0.1
+2026-11-18 16:05:36,741 | INFO | pathsnap | POST /predict | 200 | 618.56 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:38,457 | INFO | pathsnap | PREDICT trip=00000076 model=default hmm=on points=1486 top1=0.9744 seqF1=0.9899 total=1612ms score=81ms client=127.0.0.1
+2026-11-18 16:05:38,466 | INFO | pathsnap | POST /predict | 200 | 1720.10 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:39,353 | INFO | pathsnap | GET /health | 200 | 0.76 ms
+INFO:     127.0.0.1:55141 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:05:40,895 | INFO | pathsnap | PREDICT trip=00000077 model=default hmm=on points=3911 top1=0.8998 seqF1=0.9647 total=2309ms score=111ms client=127.0.0.1
+2026-11-18 16:05:40,915 | INFO | pathsnap | POST /predict | 200 | 2445.32 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:41,686 | INFO | pathsnap | PREDICT trip=00000091 model=default hmm=on points=874 top1=0.9428 seqF1=0.9924 total=728ms score=35ms client=127.0.0.1
+2026-11-18 16:05:41,692 | INFO | pathsnap | POST /predict | 200 | 772.91 ms
+INFO:     127.0.0.1:55122 - "POST /predict HTTP/1.1" 200 OK
+2026-11-18 16:05:54,354 | INFO | pathsnap | GET /health | 200 | 0.81 ms
+INFO:     127.0.0.1:55168 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:06:09,357 | INFO | pathsnap | GET /health | 200 | 0.70 ms
+INFO:     127.0.0.1:55186 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:06:24,363 | INFO | pathsnap | GET /health | 200 | 0.58 ms
+INFO:     127.0.0.1:55207 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:06:39,355 | INFO | pathsnap | GET /health | 200 | 0.64 ms
+INFO:     127.0.0.1:55232 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:06:54,349 | INFO | pathsnap | GET /health | 200 | 0.66 ms
+INFO:     127.0.0.1:55255 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:07:09,348 | INFO | pathsnap | GET /health | 200 | 0.55 ms
+INFO:     127.0.0.1:55272 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:07:24,353 | INFO | pathsnap | GET /health | 200 | 0.76 ms
+INFO:     127.0.0.1:55294 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:07:39,361 | INFO | pathsnap | GET /health | 200 | 0.92 ms
+INFO:     127.0.0.1:55313 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:07:54,359 | INFO | pathsnap | GET /health | 200 | 0.56 ms
+INFO:     127.0.0.1:55351 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:08:09,357 | INFO | pathsnap | GET /health | 200 | 0.67 ms
+INFO:     127.0.0.1:55371 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:08:24,351 | INFO | pathsnap | GET /health | 200 | 0.76 ms
+INFO:     127.0.0.1:55394 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:08:39,354 | INFO | pathsnap | GET /health | 200 | 0.65 ms
+INFO:     127.0.0.1:55417 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:08:54,353 | INFO | pathsnap | GET /health | 200 | 0.50 ms
+INFO:     127.0.0.1:61583 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:09:09,358 | INFO | pathsnap | GET /health | 200 | 0.88 ms
+INFO:     127.0.0.1:61606 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:09:24,361 | INFO | pathsnap | GET /health | 200 | 0.67 ms
+INFO:     127.0.0.1:61629 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:09:39,354 | INFO | pathsnap | GET /health | 200 | 0.73 ms
+INFO:     127.0.0.1:61650 - "GET /health HTTP/1.1" 200 OK
+2026-11-18 16:09:54,363 | INFO | pathsnap | GET /health | 200 | 0.86 ms
+INFO:     127.0.0.1:61686 - "GET /health HTTP/1.1" 200 OK
