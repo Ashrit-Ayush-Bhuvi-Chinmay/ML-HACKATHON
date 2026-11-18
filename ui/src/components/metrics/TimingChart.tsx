@@ -9,6 +9,10 @@ const STAGE_HINT: Record<string, string> = {
   features: 'Building the classifier’s input features for each point–arc pair.',
   classifier: 'Scoring the candidates with the selected ML model.',
   hmm: 'HMM / Viterbi decoding of the most likely connected route.',
+  decode: 'Classifier-only run: picking each point’s best candidate without Viterbi.',
+  route: 'Joining the matched segments into a route.',
+  continuity: 'Checking the route’s continuity.',
+  response: 'Building the JSON reply.',
 }
 
 /**
@@ -23,7 +27,17 @@ export function TimingChart({ timings, roundTripMs }: { timings: TimingsMs; roun
     ...stages.filter((s) => !(STAGE_ORDER as readonly string[]).includes(s.key)).map((s) => ({ key: s.key, label: s.label, ms: s.ms, hint: 'Extra stage reported by the API.' })),
     ...(unattributed !== null ? [{ key: 'other', label: 'Other', ms: unattributed, hint: 'Server total minus the listed stages.' }] : []),
   ]
-  const labels: Record<string, string> = { load: 'Load trip', candidates: 'Candidate arcs', features: 'Features', classifier: 'Classifier', hmm: 'HMM / Viterbi' }
+  const labels: Record<string, string> = {
+    load: 'Load trip',
+    candidates: 'Candidate arcs',
+    features: 'Features',
+    classifier: 'Classifier',
+    hmm: 'HMM / Viterbi',
+    decode: 'Decode',
+    route: 'Build route',
+    continuity: 'Check continuity',
+    response: 'Build response',
+  }
   const max = Math.max(1, ...rows.map((r) => r.ms ?? 0))
 
   return (

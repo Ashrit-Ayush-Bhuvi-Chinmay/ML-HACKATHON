@@ -3,41 +3,54 @@ import { InfoTip } from '@/components/common/InfoTip'
 import { fmtInt, fmtPct, NA } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-export const METRIC_DEFS: { key: keyof PredictionMetrics; label: string; hint: string; ratio: boolean }[] = [
+interface MetricDef {
+  key: Exclude<keyof PredictionMetrics, 'note'>
+  label: string
+  hint: string
+  ratio: boolean
+  /** Extra explanation shown under a null value, instead of the generic line. */
+  missingText?: (m: PredictionMetrics) => string
+}
+
+export const METRIC_DEFS: MetricDef[] = [
   {
     key: 'top1_accuracy',
     label: 'Top-1 accuracy',
-    hint: 'Observation level: for each GPS point, the highest-scoring candidate arc is compared with the reference arc. Computed on the API server; the reference route never reaches this UI.',
+    hint: 'Share of GPS points matched to the right road segment. For each observation, the highest-scoring candidate arc is compared with the reference arc on the server.',
     ratio: true,
   },
   {
-    key: 'route_f1',
-    label: 'Route F1',
-    hint: 'Route-level F1 score computed by the API’s score_trip() against the reference route. See the backend team’s implementation for the exact definition.',
+    key: 'sequence_f1',
+    label: 'Sequence F1',
+    hint: 'Did we recover the journey? Order- and lap-aware route score, so a wrong order or a missed lap lowers it. This is the main route metric.',
+    ratio: true,
+  },
+  {
+    key: 'coverage_f1',
+    label: 'Coverage F1',
+    hint: 'Did we cover the right roads? Length-weighted and order-independent, so it credits the right roads even when their order is wrong.',
     ratio: true,
   },
   {
     key: 'route_continuity',
     label: 'Route continuity',
-    hint: 'How connected the predicted route is, as computed by the API’s score_trip(). See the backend implementation for the exact definition.',
+    hint: 'Share of segment changes a car could physically make. N/A means there was nothing to judge (for example no segment changes).',
     ratio: true,
+    missingText: (m) =>
+      typeof m.n_transitions === 'number'
+        ? `Nothing to judge (${fmtInt(m.n_transitions)} transitions)`
+        : 'Nothing to judge',
   },
   {
-    key: 'route_precision',
-    label: 'Route precision',
-    hint: 'Route-level precision computed by the API’s score_trip() against the reference route.',
-    ratio: true,
-  },
-  {
-    key: 'route_recall',
-    label: 'Route recall',
-    hint: 'Route-level recall computed by the API’s score_trip() against the reference route.',
+    key: 'route_mismatch',
+    label: 'Route mismatch',
+    hint: 'Wrongly added plus missed route length, as a fraction of the true route. Lower is better.',
     ratio: true,
   },
   {
     key: 'n_points_scored',
     label: 'Points scored',
-    hint: 'How many GPS points the API scored. A value of 0 is a real zero returned by the API, not missing data.',
+    hint: 'GPS points with a reliable reference label. A value of 0 is a real zero returned by the API, not missing data.',
     ratio: false,
   },
 ]
@@ -68,7 +81,7 @@ export function MetricTiles({
     <dl className={cn('grid gap-2', size === 'lg' ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-2', className)}>
       {METRIC_DEFS.map((m) => {
         const v = metrics[m.key]
-        const missing = v === null
+        const missing = v === null || v === undefined
         return (
           <div
             key={m.key}
@@ -92,7 +105,11 @@ export function MetricTiles({
               {missing ? NA : m.ratio ? fmtPct(v) : fmtInt(v)}
             </dd>
             {!missing && m.ratio && <Meter value={v} />}
-            {missing && <p className="mt-1.5 text-[11.5px] leading-tight text-ink-faint">Not returned by the API</p>}
+            {missing && (
+              <p className="mt-1.5 text-[11.5px] leading-tight text-ink-faint">
+                {m.missingText ? m.missingText(metrics) : 'Not returned by the API'}
+              </p>
+            )}
           </div>
         )
       })}

@@ -4,12 +4,12 @@ import { fmtPct } from '@/lib/format'
 export interface SessionRow {
   trip_id: string
   top1: number | null
-  f1: number | null
+  sequenceF1: number | null
 }
 
 const AXIS = { fill: 'var(--ps-ink-faint)', fontSize: 12 }
 
-/** Top-1 accuracy and route F1 per trip, as returned by the API during this session. */
+/** Top-1 accuracy and sequence F1 per trip, as returned by the API during this session. */
 export function SessionChart({ rows }: { rows: SessionRow[] }) {
   return (
     <div className="h-[280px]">
@@ -35,7 +35,7 @@ export function SessionChart({ rows }: { rows: SessionRow[] }) {
             formatter={(v) => <span style={{ color: 'var(--ps-ink-muted)', fontSize: 12.5 }}>{v}</span>}
           />
           <Bar dataKey="top1" name="Top-1 accuracy" fill="var(--ps-series-1)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
-          <Bar dataKey="f1" name="Route F1" fill="var(--ps-series-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+          <Bar dataKey="sequenceF1" name="Sequence F1" fill="var(--ps-series-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

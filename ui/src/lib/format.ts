@@ -39,7 +39,17 @@ export function fmtRelative(ts: number, now = Date.now()): string {
 }
 
 /** Contract stage order; any extra keys the backend adds are appended. */
-export const STAGE_ORDER = ['load', 'candidates', 'features', 'classifier', 'hmm'] as const
+export const STAGE_ORDER = [
+  'load',
+  'candidates',
+  'features',
+  'classifier',
+  'hmm',
+  'decode',
+  'route',
+  'continuity',
+  'response',
+] as const
 
 export const STAGE_LABELS: Record<string, string> = {
   load: 'Load trip',
@@ -47,6 +57,10 @@ export const STAGE_LABELS: Record<string, string> = {
   features: 'Features',
   classifier: 'Classifier',
   hmm: 'HMM / Viterbi',
+  decode: 'Decode (classifier only)',
+  route: 'Build route',
+  continuity: 'Check continuity',
+  response: 'Build response',
 }
 
 export interface StageTiming {

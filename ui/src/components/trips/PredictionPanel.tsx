@@ -142,7 +142,7 @@ export function PredictionPanel() {
               }
               hint="Points with a non-null predicted arc. A count of the prediction, not an accuracy metric."
             />
-            <Fact label="Route arcs" value={fmtInt(result.response.route_arcs.length)} hint="Length of route_arcs, the connected predicted route." />
+            <Fact label="Route arcs" value={fmtInt(result.response.route_arcs.length)} hint="Length of the predicted route, split into pieces at GPS gaps." />
             <Fact label="Server time" value={fmtMs(result.response.timings_ms.total)} hint="timings_ms.total reported by the API." />
             <Fact label="Round trip" value={fmtMs(result.roundTripMs)} hint="Measured in this browser, including network transfer." />
             <Fact label="Received" value={`${fmtClock(result.receivedAt)} (${fmtRelative(result.receivedAt)})`} />
@@ -181,6 +181,11 @@ export function PredictionPanel() {
             <StageStrip timings={result.response.timings_ms} showLegend={false} />
           </section>
           <MetricTiles metrics={result.response.metrics} />
+          {result.response.metrics.note && (
+            <Notice tone="warn" title="Metric note">
+              {result.response.metrics.note}
+            </Notice>
+          )}
           {allMetricsNull(result.response.metrics) && !placeholder && (
             <p className="text-[12.5px] text-ink-faint">The API returned no metric values for this trip.</p>
           )}

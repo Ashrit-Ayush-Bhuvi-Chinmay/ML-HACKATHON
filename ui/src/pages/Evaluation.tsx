@@ -200,15 +200,17 @@ function BatchRunner() {
   )
 }
 
-const COLS: { key: keyof PredictionMetrics; label: string }[] = [
+type MetricKey = Exclude<keyof PredictionMetrics, 'note'>
+
+const COLS: { key: MetricKey; label: string }[] = [
   { key: 'top1_accuracy', label: 'Top-1' },
-  { key: 'route_precision', label: 'Precision' },
-  { key: 'route_recall', label: 'Recall' },
-  { key: 'route_f1', label: 'F1' },
+  { key: 'sequence_f1', label: 'Sequence F1' },
+  { key: 'coverage_f1', label: 'Coverage F1' },
   { key: 'route_continuity', label: 'Continuity' },
+  { key: 'route_mismatch', label: 'Mismatch' },
 ]
 
-type SortKey = 'trip' | 'points' | 'status' | keyof PredictionMetrics | 'server'
+type SortKey = 'trip' | 'points' | 'status' | MetricKey | 'server'
 type Filter = 'all' | TripStatus
 
 const STATUS_ORDER: Record<TripStatus, number> = { failed: 0, running: 1, 'not-run': 2, done: 3 }
@@ -272,7 +274,7 @@ function ResultsTable() {
       if (key === 'points') return n
       if (key === 'status') return STATUS_ORDER[tripStatus(rec)]
       if (key === 'server') return r?.timings_ms.total ?? null
-      return r ? r.metrics[key] : null
+      return r ? (r.metrics[key] ?? null) : null
     }
     const list = trips.trips.filter((t) => filter === 'all' || tripStatus(predictions[t.trip_id]) === filter)
     return [...list].sort((a, b) => {
@@ -400,7 +402,7 @@ function ResultsTable() {
                 </td>
                 {COLS.map((c) => (
                   <td key={c.key} className={cn(td, 'font-medium')}>
-                    {fmtPct(mean(done.map((d) => d.response.metrics[c.key])))}
+                    {fmtPct(mean(done.map((d) => d.response.metrics[c.key] ?? null)))}
                   </td>
                 ))}
                 <td colSpan={3} />

@@ -56,13 +56,21 @@ export function validateTrips(data: unknown): TripsResponse {
   return { trips }
 }
 
-const METRIC_KEYS: (keyof PredictionMetrics)[] = [
+type NumericMetricKey = Exclude<keyof PredictionMetrics, 'note'>
+
+const METRIC_KEYS: NumericMetricKey[] = [
   'top1_accuracy',
-  'route_precision',
-  'route_recall',
-  'route_f1',
+  'coverage_precision',
+  'coverage_recall',
+  'coverage_f1',
+  'sequence_precision',
+  'sequence_recall',
+  'sequence_f1',
+  'route_mismatch',
   'route_continuity',
+  'n_transitions',
   'n_points_scored',
+  'reference_median_dist_m',
 ]
 
 function validateMetrics(raw: unknown, warnings: string[]): PredictionMetrics {
@@ -82,6 +90,7 @@ function validateMetrics(raw: unknown, warnings: string[]): PredictionMetrics {
       out[k] = null
     }
   }
+  if (typeof src.note === 'string' && src.note.trim()) out.note = src.note
   return out
 }
 

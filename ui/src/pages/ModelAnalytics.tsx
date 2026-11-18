@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { ChartColumn, FileBarChart2, FlaskConical, GitCompareArrows, SlidersHorizontal } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { InfoTip } from '@/components/common/InfoTip'
+import { Notice } from '@/components/common/Notice'
 import { Panel } from '@/components/common/Panel'
 import { Segmented } from '@/components/common/Segmented'
 import { MetricTiles } from '@/components/metrics/MetricTiles'
@@ -68,13 +69,13 @@ export function ModelAnalytics() {
         .map((r) => ({
           trip_id: r.response.trip_id,
           top1: r.response.metrics.top1_accuracy,
-          f1: r.response.metrics.route_f1,
+          sequenceF1: r.response.metrics.sequence_f1,
           n: r.response.n_points,
           scored: r.response.metrics.n_points_scored,
         })),
     [trips.trips, predictions],
   )
-  const plottable = rows.filter((r) => r.top1 !== null || r.f1 !== null)
+  const plottable = rows.filter((r) => r.top1 !== null || r.sequenceF1 !== null)
 
   return (
     <div className="flex flex-col gap-4">
@@ -89,6 +90,11 @@ export function ModelAnalytics() {
               description={`Computed on the API server against the reference route. Received ${fmtClock(result.receivedAt)}${result.model ? `, model "${result.model}"` : ''}.`}
             >
               <MetricTiles metrics={result.response.metrics} size="lg" />
+              {result.response.metrics.note && (
+                <Notice tone="warn" title="Metric note" className="mt-3">
+                  {result.response.metrics.note}
+                </Notice>
+              )}
               <p className="mt-3 flex items-center gap-2 text-[12px] text-ink-faint">
                 <span className="inline-block h-3 w-5 rounded-[3px] border border-dashed border-hairline" aria-hidden="true" />
                 Dashed tiles mean the API returned null. A real zero is shown as 0.
@@ -123,8 +129,8 @@ export function ModelAnalytics() {
                 {
                   label: 'Route arcs',
                   value: fmtInt(result.response.route_arcs.length),
-                  sub: 'in route_arcs, travel order',
-                  hint: 'Length of the connected route the API reconstructed.',
+                  sub: 'in the predicted route, split at GPS gaps',
+                  hint: 'Number of arcs in the predicted route, split into pieces at GPS gaps.',
                 },
               ]}
             />
@@ -148,7 +154,7 @@ export function ModelAnalytics() {
 
       <Panel
         title="Trips predicted in this session"
-        description="Top-1 accuracy and route F1 per trip, exactly as returned by the API."
+        description="Top-1 accuracy and sequence F1 per trip, exactly as returned by the API."
         actions={
           rows.length > 0 && (
             <Segmented
@@ -176,7 +182,7 @@ export function ModelAnalytics() {
                   <th className="py-2 pr-3 font-medium">Trip</th>
                   <th className="px-3 py-2 text-right font-medium">GPS points</th>
                   <th className="px-3 py-2 text-right font-medium">Top-1 accuracy</th>
-                  <th className="px-3 py-2 text-right font-medium">Route F1</th>
+                  <th className="px-3 py-2 text-right font-medium">Sequence F1</th>
                   <th className="py-2 pl-3 text-right font-medium">Points scored</th>
                 </tr>
               </thead>
@@ -186,7 +192,7 @@ export function ModelAnalytics() {
                     <td className="num py-1.5 pr-3 text-[15px] font-semibold">{r.trip_id}</td>
                     <td className="px-3 py-1.5 text-right text-ink-muted">{fmtInt(r.n)}</td>
                     <td className={r.top1 === null ? 'px-3 py-1.5 text-right text-ink-faint' : 'px-3 py-1.5 text-right'}>{fmtPct(r.top1)}</td>
-                    <td className={r.f1 === null ? 'px-3 py-1.5 text-right text-ink-faint' : 'px-3 py-1.5 text-right'}>{fmtPct(r.f1)}</td>
+                    <td className={r.sequenceF1 === null ? 'px-3 py-1.5 text-right text-ink-faint' : 'px-3 py-1.5 text-right'}>{fmtPct(r.sequenceF1)}</td>
                     <td className="py-1.5 pl-3 text-right text-ink-muted">{fmtInt(r.scored)}</td>
                   </tr>
                 ))}

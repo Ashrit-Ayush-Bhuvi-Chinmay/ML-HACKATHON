@@ -279,7 +279,7 @@ export function RouteAnalysis() {
             label="Route arcs"
             value={fmtInt(response.route_arcs.length)}
             sub={`continuity ${fmtPct(response.metrics.route_continuity)} from the API`}
-            hint="Length of route_arcs, the connected route the API reconstructed."
+            hint="Length of the predicted route, split into pieces at GPS gaps."
           />
         </dl>
         <p className="mt-1.5 text-[12px] text-ink-faint">
@@ -322,7 +322,7 @@ export function RouteAnalysis() {
 
       <Panel
         title="Reconstructed route"
-        description="route_arcs: the connected predicted route as arc ids in travel order. Select an arc to jump to its first matched GPS point."
+        description="The predicted route as arc ids in travel order, split into pieces at GPS gaps. Select an arc to jump to its first matched GPS point."
         actions={
           focusArc !== null && view.routePos.get(focusArc) ? (
             <span className="flex items-center gap-1.5 text-[12.5px] text-ink-muted">

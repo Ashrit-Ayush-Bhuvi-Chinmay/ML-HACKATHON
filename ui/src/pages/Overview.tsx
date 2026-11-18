@@ -16,6 +16,10 @@ const STAGE_TEXT: Record<(typeof STAGE_ORDER)[number], string> = {
   features: 'Builds the classifier’s input for each point–arc pair.',
   classifier: 'The selected ML model scores every candidate.',
   hmm: 'Viterbi decoding picks the most likely connected route.',
+  decode: 'Classifier-only runs pick each point’s best candidate, without Viterbi.',
+  route: 'Joins the matched segments into a route.',
+  continuity: 'Checks how continuous the route is.',
+  response: 'Builds the reply sent to this interface.',
 }
 
 function hostOf(url: string) {

@@ -52,22 +52,44 @@ export interface FeatureCollection {
 
 /**
  * Evaluation metrics computed server-side by score_trip() against the reference route,
- * which never leaves Laptop 1. Any value may be null (e.g. while the model is a stub).
+ * which never leaves Laptop 1. Any value may be null.
  */
 export interface PredictionMetrics {
+  /** Share of GPS points matched to the right road segment. */
   top1_accuracy: number | null
-  route_precision: number | null
-  route_recall: number | null
-  route_f1: number | null
+  /** Did we cover the right roads? Length-weighted, ignores order. */
+  coverage_precision: number | null
+  coverage_recall: number | null
+  coverage_f1: number | null
+  /** Did we recover the journey? Order- and lap-aware, the main route score. */
+  sequence_precision: number | null
+  sequence_recall: number | null
+  sequence_f1: number | null
+  /** Wrongly added + missed route length as a fraction of the true route. Lower is better. */
+  route_mismatch: number | null
+  /** Share of segment changes a car could physically make; null when nothing to judge. */
   route_continuity: number | null
+  /** How many segment changes the continuity is based on. */
+  n_transitions: number | null
+  /** Points with a reliable reference label. */
   n_points_scored: number | null
+  /** Median GPS-to-reference distance in metres, when the API reports it. */
+  reference_median_dist_m?: number | null
+  /** Optional explanation, e.g. "no reference route for this trip; prediction only". */
+  note?: string
 }
 
 /**
  * Stage timings in milliseconds. The contract lists load, candidates, features,
- * classifier, hmm and total; the stub only returns total, so every key is optional.
+ * classifier, hmm, route, continuity and response; classifier-only runs report `decode`
+ * instead of `hmm`. Unknown extra keys are tolerated.
  */
-export type TimingsMs = Partial<Record<'load' | 'candidates' | 'features' | 'classifier' | 'hmm' | 'total', number>> &
+export type TimingsMs = Partial<
+  Record<
+    'load' | 'candidates' | 'features' | 'classifier' | 'hmm' | 'decode' | 'route' | 'continuity' | 'response' | 'total',
+    number
+  >
+> &
   Record<string, number>
 
 /** POST /predict response */
@@ -76,11 +98,21 @@ export interface PredictResponse {
   n_points: number
   /** One entry per GPS point, in order. null = unmatched. */
   predicted_arcs: (number | null)[]
-  /** Connected predicted route as arc ids in travel order. */
+  /** The predicted route as arc ids in travel order, split into pieces at GPS gaps. */
   route_arcs: number[]
   geojson: FeatureCollection
   metrics: PredictionMetrics
   timings_ms: TimingsMs
+  /** Number of lines in the predicted route (the route is split at GPS gaps). */
+  n_route_pieces?: number
+  /** GPS points with no matched arc. */
+  n_unmatched?: number
+  /** Model name reported by the API for this prediction. */
+  model?: string
+  /** Whether HMM/Viterbi decoding produced this route. */
+  hmm?: boolean
+  /** Systematic GPS-shift correction applied by the API, if any. */
+  offset_correction?: { applied?: boolean; dx_m?: number; dy_m?: number } | null
 }
 
 /** FastAPI error body: {"detail": "..."} */
