@@ -17,6 +17,8 @@ SEED = 352  # fixed for every experiment; logged with every result
 
 # Label reliability (chosen from the train label-distance distribution, see results/labels/).
 LABEL_MAX_DIST = 50.0       # a point further than this from its reference arc is unlabelled
+CAND_RADIUS = 50.0          # metres; from results/candidates/sweep.csv (train miss rate 0.11 %
+CAND_K = 16                 # at ~7.8 candidates per point)
 TRIP_MAX_MEDIAN_DIST = 50.0 # a trip whose median label distance exceeds this has an unusable
                             # reference (train 33: route ~120 m from on-road GPS; train 54:
                             # whole track shifted ~117 m off every road) and is left out
