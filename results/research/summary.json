@@ -1,0 +1,60 @@
+{
+  "A_error_share_of_points_student_test": {
+    "twin": 0.0193,
+    "junction_boundary": 0.0166,
+    "adjacent_far": 0.0114,
+    "other_road": 0.0056
+  },
+  "B_best_decoder": {
+    "trial": "t18",
+    "beta": 10.0,
+    "emission_weight": 0.5,
+    "unreachable_logp": -25.0,
+    "sp_limit": 1500.0,
+    "gap_dt": 300.0,
+    "gap_dist": 1000.0,
+    "backward_tol": 30.0,
+    "top1": 0.9542217558586918,
+    "continuity": 0.9917232859789994,
+    "sequence_f1": 0.9532989300670593,
+    "coverage_f1": 0.9655902641236971,
+    "route_mismatch": 0.07503960316655159,
+    "frozen_train": {
+      "top1": 0.9459951031829311,
+      "continuity": 0.9869940440014586,
+      "sequence_f1": 0.937056861574117,
+      "coverage_f1": 0.9608793139955478,
+      "route_mismatch": 0.0862115804879792
+    }
+  },
+  "selected_on_train": {
+    "decoder_params": {
+      "beta": 10.0,
+      "emission_weight": 0.5,
+      "unreachable_logp": -25.0,
+      "sp_limit": 1500.0,
+      "gap_dt": 300.0,
+      "gap_dist": 1000.0,
+      "backward_tol": 30.0
+    },
+    "emission_source": "lgbm_tuned",
+    "decoding": "viterbi"
+  },
+  "student_test": {
+    "frozen": {
+      "top1": 0.9471593581769717,
+      "continuity": 0.9949669707455174,
+      "sequence_f1": 0.9850367912322916,
+      "coverage_f1": 0.9874771233948252,
+      "route_mismatch": 0.02550434254323261
+    },
+    "research_selection": {
+      "top1": 0.9517064757225736,
+      "continuity": 0.9977924944812362,
+      "sequence_f1": 0.9888450667421946,
+      "coverage_f1": 0.9907657209570606,
+      "route_mismatch": 0.01867517284495047
+    }
+  },
+  "minutes": 6.5
+}
