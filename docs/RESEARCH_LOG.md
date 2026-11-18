@@ -99,3 +99,7 @@ Results (`results/research/r3_summary.json`):
 
 R1 decoder settings with the frozen trained model: student-test Top-1 0.9517, sequence F1 0.9888,
 route mismatch 0.0187. Not run on the evaluator set.
+
+## Unrestricted research
+
+The [decoder search](../experiments/unrestricted_research/decoder_search/README.md) compares 45 configurations, including a five-classifier blend and learned transition scores. The learned blend reached 99.06% mean sequence F1 and 94.59% point Top-1 on student-test, versus 98.50% and 94.72% for the frozen system. The archive includes the train split, matched ablation, per-trip results, and fitted transition model. It uses the supplied training and student-test trips.
