@@ -55,7 +55,8 @@ Open `http://localhost:5173`, type laptop 1's address into **API address**, pick
 
 If the laptops cannot reach each other on college Wi-Fi (device-to-device traffic is often
 blocked), put both on a phone hotspot. Both on one machine: run both scripts and use
-`http://localhost:8000`.
+`http://127.0.0.1:8000` (more reliable than `localhost`, which may try IPv6 first). If something
+else already uses port 8000: `.\run_api.ps1 -Port 8001` and use that port in the UI.
 
 ## Reproducing the experiments
 
