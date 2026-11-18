@@ -20,9 +20,9 @@ import numpy as np
 import pandas as pd
 
 from pathsnap import config
-from pathsnap.evaluate import best_per_point
+from pathsnap.evaluate import arc_lengths_m, best_per_point, route_scores
 from pathsnap.features import prepare_trip
-from pathsnap.hmm import HMMParams, RoadGraph, build_route, plausible_continuity, viterbi
+from pathsnap.hmm import HMMParams, build_route, plausible_continuity, segment_ids, viterbi
 from pathsnap.io import list_trips, load_route, load_trip
 
 
@@ -51,20 +51,10 @@ def top1_counts(ctx, rows, lab):
 
 
 def route_metrics(ctx, trip, pieces, ref_route):
-    pred = {a for p in pieces for a in p}
-    ref = set(int(a) for a in ref_route)
-    ids = np.array(sorted(pred | ref))
-    u, v = trip.arcs[ids, 0], trip.arcs[ids, 1]
-    x1, y1 = ctx.proj.to_xy(trip.nodes[u, 0], trip.nodes[u, 1])
-    x2, y2 = ctx.proj.to_xy(trip.nodes[v, 0], trip.nodes[v, 1])
-    length = dict(zip(ids.tolist(), np.hypot(x2 - x1, y2 - y1).tolist()))
-    L = lambda s: sum(length[a] for a in s)
-    inter = L(pred & ref)
-    prec = inter / max(L(pred), 1e-9)
-    rec = inter / max(L(ref), 1e-9)
-    return {"route_precision": prec, "route_recall": rec,
-            "route_f1": 2 * prec * rec / max(prec + rec, 1e-9),
-            "route_mismatch": (L(pred - ref) + L(ref - pred)) / max(L(ref), 1e-9)}
+    """Coverage (set) and sequence (order-aware) route scores, see pathsnap.evaluate."""
+    pred_seq = [a for p in pieces for a in p]
+    length = arc_lengths_m(trip, ctx.proj, pred_seq + [int(a) for a in ref_route])
+    return route_scores(pred_seq, [int(a) for a in ref_route], length)
 
 
 def tune(model: str, n_trips: int) -> HMMParams:
@@ -126,11 +116,13 @@ def main() -> None:
             "distance_hmm": viterbi(ctx, bprob, base_params, graph)[0],
             "distance_only": argmax_rows(ctx, bprob),
         }
+        seg = segment_ids(ctx, params)
         for name, rows in variants.items():
             hit, n = top1_counts(ctx, rows, lab)
+            cont, n_tr = plausible_continuity(ctx, graph, rows, seg)
             r = {"trip_id": trip_id, "variant": name, "top1_hits": hit, "n_reliable": n, "top1": hit / max(n, 1),
-                 "continuity": plausible_continuity(ctx, graph, rows)}
-            r.update(route_metrics(ctx, trip, build_route(ctx, graph, rows), ref_route))
+                 "continuity": cont, "n_transitions": n_tr}
+            r.update(route_metrics(ctx, trip, build_route(ctx, graph, rows, seg), ref_route))
             if name == "classifier_hmm":
                 r["decode_s"] = t_hmm
             per_trip.append(r)
@@ -141,11 +133,16 @@ def main() -> None:
     out = config.RESULTS_DIR / "hmm"
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / f"per_trip_{args.model}.csv", index=False)
+    def pooled_continuity(g):
+        n = g["n_transitions"].sum()
+        return float((g["continuity"].fillna(0) * g["n_transitions"]).sum() / n) if n else None
+
     summ = df.groupby("variant").apply(lambda g: pd.Series({
         "top1": g["top1_hits"].sum() / g["n_reliable"].sum(),
-        "continuity_mean": g["continuity"].mean(),
-        "route_precision": g["route_precision"].mean(), "route_recall": g["route_recall"].mean(),
-        "route_f1": g["route_f1"].mean(), "route_mismatch": g["route_mismatch"].mean()}), include_groups=False)
+        "continuity_pooled": pooled_continuity(g),
+        "coverage_f1": g["coverage_f1"].mean(), "sequence_f1": g["sequence_f1"].mean(),
+        "sequence_precision": g["sequence_precision"].mean(), "sequence_recall": g["sequence_recall"].mean(),
+        "route_mismatch": g["route_mismatch"].mean()}), include_groups=False)
     summ["model"] = args.model
     summ["params"] = json.dumps(params.as_dict())
     summ.to_csv(out / f"summary_{args.model}.csv")

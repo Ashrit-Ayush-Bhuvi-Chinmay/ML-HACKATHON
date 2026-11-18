@@ -74,17 +74,32 @@ Response:
   },
   "metrics": {
     "top1_accuracy": 0.93,
-    "route_precision": 0.95,
-    "route_recall": 0.94,
-    "route_f1": 0.945,
+    "coverage_precision": 0.97, "coverage_recall": 0.99, "coverage_f1": 0.98,
+    "sequence_precision": 0.96, "sequence_recall": 0.98, "sequence_f1": 0.97,
+    "route_mismatch": 0.04,
     "route_continuity": 0.99,
+    "n_transitions": 412,
     "n_points_scored": 3901
   },
-  "timings_ms": {"load": 120, "candidates": 300, "features": 250, "classifier": 90, "hmm": 800, "total": 1600}
+  "n_route_pieces": 1,
+  "timings_ms": {"load": 120, "candidates": 300, "features": 250, "classifier": 90, "hmm": 800,
+                 "route": 40, "continuity": 60, "response": 30, "total": 1700}
 }
 ```
 - `predicted_arcs`: one entry per GPS point, in order; `null` means unmatched.
-- `route_arcs`: the connected predicted route, as arc ids in travel order.
+- `route_arcs`: the predicted route as arc ids in travel order (all pieces concatenated).
+- The route is split into pieces (separate lines in the MultiLineString) at GPS gaps, so no
+  line is drawn across hours without evidence. `n_route_pieces` says how many there are.
+- **Metrics, in plain words** (show these labels in the UI):
+  - `top1_accuracy`: share of GPS points matched to the right road segment.
+  - `coverage_*`: did we cover the right roads? Length-weighted, ignores order.
+  - `sequence_*`: did we recover the journey? Order- and repeat-aware, so a wrong order or a
+    missed lap lowers it.
+  - `route_continuity`: share of segment changes a car could physically make. `null` when there
+    is nothing to judge (see `n_transitions`).
+  - Any metric can be `null` when it cannot be computed (e.g. no `.route` file); show "n/a".
+- `timings_ms.total` is the wall clock of the prediction call. Scoring is timed separately;
+  log both in the API console.
 - GeoJSON coordinates are `[lon, lat]` (the GeoJSON standard). Folium/Leaflet `PolyLine` wants
   `[lat, lon]`, so either use `folium.GeoJson` / `L.geoJSON` directly or swap the order.
 - Metric values may be `null` while the model is still a stub.
@@ -133,8 +148,8 @@ def predict_trip(trip_dir):
 
 
 def score_trip(trip_dir, prediction):
-    return {"top1_accuracy": None, "route_precision": None, "route_recall": None,
-            "route_f1": None, "route_continuity": None, "n_points_scored": 0}
+    return {"top1_accuracy": None, "coverage_f1": None, "sequence_f1": None,
+            "route_continuity": None, "n_points_scored": 0}
 ```
 
 ## Rules from the brief (these get checked)

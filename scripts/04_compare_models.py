@@ -24,8 +24,9 @@ import pandas as pd
 from sklearn.model_selection import GroupKFold
 
 from pathsnap import config
-from pathsnap.evaluate import pair_metrics, point_keys, route_continuity, top1_accuracy, best_per_point
-from pathsnap.features import FEATURES
+from pathsnap.evaluate import best_per_point, pair_metrics, point_keys, strict_adjacency, top1_accuracy
+from pathsnap.features import FEATURES, prepare_trip
+from pathsnap.hmm import HMMParams, RoadGraph, plausible_continuity, segment_ids
 from pathsnap.io import load_trip
 from pathsnap.models import SPECS, DistanceGaussian
 
@@ -109,14 +110,28 @@ def metrics(P: pd.DataFrame, Q: pd.DataFrame, prob: np.ndarray) -> dict:
     return m
 
 
-def continuity(P: pd.DataFrame, prob: np.ndarray, split: str) -> float:
-    vals = []
+def continuity(P: pd.DataFrame, prob: np.ndarray, split: str) -> tuple[float | None, float | None]:
+    """Classifier-only route of every trip: (strict head->tail adjacency, mean over trips;
+    plausible continuity, pooled over all transitions, gaps excluded). See pathsnap.evaluate."""
+    strict, ok, n_tr = [], 0.0, 0
+    params = HMMParams()
     for trip_id, g in P.groupby("trip_id", sort=False):
         idx = g.index.to_numpy()
         _, best = best_per_point(P["_key"].to_numpy()[idx], prob[idx])
-        arcs = load_trip(config.DATA_ROOT / split / trip_id).arcs
-        vals.append(route_continuity(P["arc_id"].to_numpy()[idx][best], arcs))
-    return float(np.mean(vals))
+        trip = load_trip(config.DATA_ROOT / split / trip_id)
+        s = strict_adjacency(P["arc_id"].to_numpy()[idx][best], trip.arcs)
+        if s is not None:
+            strict.append(s)
+        ctx = prepare_trip(trip, config.CAND_RADIUS, config.CAND_K)
+        assert np.array_equal(P["obs"].to_numpy()[idx], ctx.cands.obs), f"{trip_id}: candidate order mismatch"
+        rows = np.full(trip.n_points, -1, dtype=np.int64)
+        k, b = best_per_point(ctx.cands.obs, prob[idx])  # P rows of a trip are in candidate order
+        rows[k] = b
+        c, n = plausible_continuity(ctx, RoadGraph(ctx, params.sp_limit), rows, segment_ids(ctx, params))
+        if n:
+            ok += c * n
+            n_tr += n
+    return (float(np.mean(strict)) if strict else None), (ok / n_tr if n_tr else None)
 
 
 def get_spec(name: str):
@@ -159,8 +174,8 @@ def main() -> None:
             print(f"!!! {name} failed: {exc!r}", flush=True)
 
     cols = ["model", "cv_macro_f1_mean", "cv_top1", "cv_log_loss", "test_top1", "test_macro_f1",
-            "test_log_loss", "test_route_continuity", "infer_ms_per_1k_points"]
-    print("\n" + table[cols].round(4).to_string(index=False))
+            "test_log_loss", "test_plausible_continuity", "test_strict_adjacency", "infer_ms_per_1k_points"]
+    print("\n" + table.reindex(columns=cols).round(4).to_string(index=False))
 
 
 def run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table_path):
@@ -184,12 +199,13 @@ def run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table
 
         prob_te, model, fit_s, pred_s = fit_predict(spec, P_tr, P_te, config.SEED, rng)
         te = metrics(P_te, Q_te, prob_te)
-        cont = continuity(P_te, prob_te, "student_test")
+        strict, cont = continuity(P_te, prob_te, "student_test")
         n_te_points = len(Q_te)
         print(f"  CV  : top1 {cv['top1']:.4f}  macroF1 {folds_df['macro_f1'].mean():.4f}±{folds_df['macro_f1'].std():.4f}"
               f"  logloss {cv['log_loss']:.4f}")
         print(f"  TEST: top1 {te['top1']:.4f}  macroF1 {te['macro_f1']:.4f}  logloss {te['log_loss']:.4f}"
-              f"  continuity {cont:.4f}  fit {fit_s:.1f}s  predict {1000 * pred_s / n_te_points * 1000:.1f} ms/1k pts", flush=True)
+              f"  continuity {cont}  strict adjacency {strict}  fit {fit_s:.1f}s"
+              f"  predict {1000 * pred_s / n_te_points * 1000:.1f} ms/1k pts", flush=True)
 
         pd.DataFrame({"trip_id": P_tr["trip_id"], "obs": P_tr["obs"], "arc_id": P_tr["arc_id"], "prob": oof}
                      ).to_parquet(pred_dir / f"{name}_oof.parquet", index=False)
@@ -203,7 +219,8 @@ def run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table
             "cv_macro_f1_mean": folds_df["macro_f1"].mean(), "cv_macro_f1_std": folds_df["macro_f1"].std(),
             "cv_top1": cv["top1"], "cv_top1_fold_std": folds_df["top1"].std(), "cv_log_loss": cv["log_loss"],
             "test_top1": te["top1"], "test_macro_f1": te["macro_f1"], "test_precision": te["precision"],
-            "test_recall": te["recall"], "test_log_loss": te["log_loss"], "test_route_continuity": cont,
+            "test_recall": te["recall"], "test_log_loss": te["log_loss"],
+            "test_plausible_continuity": cont, "test_strict_adjacency": strict,
             "fit_s_full": fit_s, "infer_ms_per_1k_points": 1e6 * pred_s / n_te_points,
             "seed": config.SEED, "run": stamp,
         }

@@ -50,10 +50,13 @@ class RoadGraph:
         k = len(net.u)
         self.lu, self.lv = inv[:k], inv[k:]
         w = np.maximum(net.length, 0.01)
-        order = np.lexsort((w, self.lv, self.lu))
-        su, sv = self.lu[order], self.lv[order]
-        first = np.r_[True, (su[1:] != su[:-1]) | (sv[1:] != sv[:-1])]
-        keep = order[first]  # shortest arc for every (u, v) pair
+        if k:
+            order = np.lexsort((w, self.lv, self.lu))
+            su, sv = self.lu[order], self.lv[order]
+            first = np.r_[True, (su[1:] != su[:-1]) | (sv[1:] != sv[:-1])]
+            keep = order[first]  # shortest arc for every (u, v) pair
+        else:  # empty corridor: no road anywhere near the track
+            keep = np.zeros(0, dtype=np.int64)
         self.n = len(nodes)
         self.G = csr_matrix((w[keep], (self.lu[keep], self.lv[keep])), shape=(self.n, self.n))
         self.edge_arc = {(int(a), int(b)): int(i) for a, b, i in zip(self.lu[keep], self.lv[keep], keep)}
@@ -135,6 +138,7 @@ def viterbi(ctx: TripContext, prob: np.ndarray, params: HMMParams, graph: RoadGr
             if bp is not None:
                 j = int(bp[j])
 
+    seg = segment_ids(ctx, params)
     chain = []
     score = None
     prev = None
@@ -143,9 +147,8 @@ def viterbi(ctx: TripContext, prob: np.ndarray, params: HMMParams, graph: RoadGr
         emis = params.emission_weight * _norm_log(prob[s:e])
         if prev is not None:
             po, prows = prev
-            dt = ctx.t[o] - ctx.t[po]
             d_gps = float(np.hypot(ctx.px[o] - ctx.px[po], ctx.py[o] - ctx.py[po]))
-            if dt > params.gap_dt or d_gps > params.gap_dist:
+            if seg[o] != seg[po]:  # GPS gap: decode the next piece independently
                 finish(chain, score)
                 chain, score = [], None
         if score is None:
@@ -166,18 +169,37 @@ def viterbi(ctx: TripContext, prob: np.ndarray, params: HMMParams, graph: RoadGr
     return best_row, graph
 
 
+def segment_ids(ctx: TripContext, params: HMMParams) -> np.ndarray:
+    """Evidence segment of every point (-1 = no candidates). A new segment starts where two
+    consecutive points that have candidates are separated by dt > gap_dt or a jump > gap_dist.
+    The decoder, route assembly and continuity all use this, so nothing is joined across a gap."""
+    seg = np.full(len(ctx.px), -1, dtype=np.int64)
+    obs = np.unique(ctx.cands.obs)
+    if len(obs) == 0:
+        return seg
+    dt = np.diff(ctx.t[obs])
+    jump = np.hypot(np.diff(ctx.px[obs]), np.diff(ctx.py[obs]))
+    seg[obs] = np.cumsum(np.r_[False, (dt > params.gap_dt) | (jump > params.gap_dist)])
+    return seg
+
+
 def plausible_continuity(ctx: TripContext, graph: RoadGraph, rows_per_point: np.ndarray,
-                         factor: float = 3.0, slack: float = 100.0) -> float:
-    """Share of consecutive changes of predicted arc that a vehicle could physically make:
-    the next arc is reachable over the network within max(factor * GPS distance, slack)."""
+                         seg: np.ndarray | None = None, factor: float = 3.0,
+                         slack: float = 100.0) -> tuple[float | None, int]:
+    """(share, number of transitions checked). A transition is a change of predicted arc
+    between consecutive matched points of the same evidence segment; it counts as continuous
+    if the next arc is reachable over the network within max(factor * GPS distance, slack).
+    With no transition to check the share is None (not 1.0): "nothing to judge" is not
+    "perfectly continuous"."""
     c = ctx.cands
     pts = np.flatnonzero(rows_per_point >= 0)
     if len(pts) < 2:
-        return 1.0
+        return None, 0
     r = rows_per_point[pts]
-    change = np.flatnonzero(c.local[r[1:]] != c.local[r[:-1]])
+    same_seg = np.ones(len(pts) - 1, dtype=bool) if seg is None else (seg[pts[1:]] == seg[pts[:-1]])
+    change = np.flatnonzero((c.local[r[1:]] != c.local[r[:-1]]) & same_seg)
     if len(change) == 0:
-        return 1.0
+        return None, 0
     ok = 0
     for k in change:
         ra, rb = r[k], r[k + 1]
@@ -185,26 +207,33 @@ def plausible_continuity(ctx: TripContext, graph: RoadGraph, rows_per_point: np.
         d_gps = float(np.hypot(ctx.px[pb] - ctx.px[pa], ctx.py[pb] - ctx.py[pa]))
         d = route_distance(graph, ctx, [c.local[ra]], [c.t[ra]], [c.local[rb]], [c.t[rb]], 15.0)[0, 0]
         ok += bool(d <= max(factor * d_gps, slack))
-    return ok / len(change)
+    return ok / len(change), int(len(change))
 
 
-def build_route(ctx: TripContext, graph: RoadGraph, rows_per_point: np.ndarray) -> list[list[int]]:
-    """Connected route(s) as lists of ORIGINAL arc ids: consecutive distinct predicted arcs are
-    joined by the shortest network path; an unreachable join starts a new piece."""
+def build_route(ctx: TripContext, graph: RoadGraph, rows_per_point: np.ndarray,
+                seg: np.ndarray | None = None) -> list[list[int]]:
+    """Route pieces as lists of ORIGINAL arc ids, in travel order. Within an evidence segment,
+    consecutive distinct predicted arcs are joined by the shortest network path; a new piece
+    starts at every GPS gap (no line is drawn where there is no evidence) and wherever the
+    join is unreachable."""
     c = ctx.cands
-    seq = c.local[rows_per_point[rows_per_point >= 0]]
-    if len(seq) == 0:
+    pts = np.flatnonzero(rows_per_point >= 0)
+    if len(pts) == 0:
         return []
-    seq = seq[np.r_[True, seq[1:] != seq[:-1]]]
-    pieces, cur = [], [int(seq[0])]
-    for a, b in zip(seq[:-1], seq[1:]):
-        path = graph.path_arcs(int(graph.lv[a]), int(graph.lu[b]))
+    arcs = c.local[rows_per_point[pts]]
+    segs = seg[pts] if seg is not None else np.zeros(len(pts), dtype=np.int64)
+    keep = np.r_[True, (arcs[1:] != arcs[:-1]) | (segs[1:] != segs[:-1])]
+    arcs, segs = arcs[keep], segs[keep]
+    pieces, cur = [], [int(arcs[0])]
+    for i in range(1, len(arcs)):
+        a, b = int(arcs[i - 1]), int(arcs[i])
+        path = None if segs[i] != segs[i - 1] else graph.path_arcs(int(graph.lv[a]), int(graph.lu[b]))
         if path is None:
             pieces.append(cur)
-            cur = [int(b)]
+            cur = [b]
         else:
             cur.extend(path)
-            cur.append(int(b))
+            cur.append(b)
     pieces.append(cur)
     ids = ctx.net.arc_ids
     return [[int(ids[i]) for i in p] for p in pieces]

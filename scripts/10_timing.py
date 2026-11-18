@@ -38,10 +38,23 @@ def main() -> None:
     pd.DataFrame(rows).to_csv(out / "inference_timing.csv", index=False)
 
     if ARTIFACT_PATH.exists():
+        from pathsnap.pipeline import score_trip
+
         lat = []
-        for trip_dir in list_trips(config.DATA_ROOT / "student_test"):
+        trips = list_trips(config.DATA_ROOT / "student_test")
+        t0 = time.perf_counter()
+        predict_trip(trips[0])  # cold call: includes loading the model bundle
+        cold_ms = 1000 * (time.perf_counter() - t0)
+        for trip_dir in trips:
+            t0 = time.perf_counter()
             pred = predict_trip(trip_dir)
-            lat.append({"trip_id": pred["trip_id"], "n_points": pred["n_points"], **pred["timings_ms"]})
+            wall_pred = 1000 * (time.perf_counter() - t0)
+            t0 = time.perf_counter()
+            score_trip(trip_dir, pred)
+            wall_score = 1000 * (time.perf_counter() - t0)
+            lat.append({"trip_id": pred["trip_id"], "n_points": pred["n_points"], "wall_ms_predict": wall_pred,
+                        "wall_ms_score": wall_score, "cold_first_call_ms": cold_ms,
+                        **{f"stage_ms_{k}": v for k, v in pred["timings_ms"].items()}})
         df = pd.DataFrame(lat)
         (config.RESULTS_DIR / "pipeline").mkdir(parents=True, exist_ok=True)
         df.to_csv(config.RESULTS_DIR / "pipeline" / "latency_default.csv", index=False)

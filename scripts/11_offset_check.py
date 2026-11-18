@@ -29,11 +29,11 @@ def main() -> None:
             m = score_trip(trip_dir, pred)
             off = pred["offset_correction"]
             rows.append({"split": split, "trip_id": tid, "correction": corr, **off,
-                         **{k: m[k] for k in ("top1_accuracy", "route_f1", "route_precision", "route_recall",
-                                              "n_points_scored", "reference_median_dist_m")}})
+                         **{k: m[k] for k in ("top1_accuracy", "coverage_f1", "coverage_precision", "coverage_recall",
+                                              "sequence_f1", "n_points_scored", "reference_median_dist_m")}})
             print(f"{split}/{tid} correction={corr!s:5}  offset {off}  top1 {m['top1_accuracy']}  "
-                  f"routeF1 {m['route_f1']}  scored {m['n_points_scored']}  ref_med {m['reference_median_dist_m']}",
-                  flush=True)
+                  f"coverageF1 {m['coverage_f1']}  sequenceF1 {m['sequence_f1']}  scored {m['n_points_scored']}"
+                  f"  ref_med {m['reference_median_dist_m']}", flush=True)
     out = config.RESULTS_DIR / "pipeline"
     out.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(out / "offset_check.csv", index=False)

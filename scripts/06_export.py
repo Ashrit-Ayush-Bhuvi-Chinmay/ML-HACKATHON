@@ -75,20 +75,28 @@ def main() -> None:
     print(f"saved {ARTIFACT_PATH} ({ARTIFACT_PATH.stat().st_size / 1e6:.1f} MB), fit {fit_s:.1f}s")
 
     rows = []
+    predict_trip(list_trips(config.DATA_ROOT / "student_test")[0], bundle)  # warm-up, as the API does
     for trip_dir in list_trips(config.DATA_ROOT / "student_test"):
+        t0 = time.perf_counter()
         pred = predict_trip(trip_dir, bundle)
+        t_pred = time.perf_counter() - t0
+        t0 = time.perf_counter()
         m = score_trip(trip_dir, pred)
-        rows.append({"trip_id": pred["trip_id"], "n_points": pred["n_points"], **m,
+        t_score = time.perf_counter() - t0
+        rows.append({"trip_id": pred["trip_id"], "n_points": pred["n_points"], "n_route_pieces": pred["n_route_pieces"],
+                     **m, "wall_ms_predict": 1000 * t_pred, "wall_ms_score": 1000 * t_score,
                      **{f"ms_{k}": v for k, v in pred["timings_ms"].items()}})
-        print(f"{pred['trip_id']}  top1 {m['top1_accuracy']:.4f}  routeF1 {m['route_f1']:.4f}"
-              f"  continuity {m['route_continuity']:.4f}  {pred['timings_ms']['total']:.0f} ms", flush=True)
+        print(f"{pred['trip_id']}  top1 {m['top1_accuracy']}  seqF1 {m['sequence_f1']}  covF1 {m['coverage_f1']}"
+              f"  continuity {m['route_continuity']} ({m['n_transitions']} transitions)"
+              f"  predict {1000 * t_pred:.0f} ms  score {1000 * t_score:.0f} ms", flush=True)
     df = pd.DataFrame(rows)
     out = config.RESULTS_DIR / "pipeline"
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / f"rehearsal_{args.model}.csv", index=False)
     w = df["n_points_scored"] / df["n_points_scored"].sum()
-    print(f"\npoint-weighted top1 {np.sum(w * df['top1_accuracy']):.4f} | mean route F1 {df['route_f1'].mean():.4f}"
-          f" | mean continuity {df['route_continuity'].mean():.4f} | max latency {df['ms_total'].max():.0f} ms")
+    print(f"\npoint-weighted top1 {np.sum(w * df['top1_accuracy']):.4f} | mean sequence F1 {df['sequence_f1'].mean():.4f}"
+          f" | mean coverage F1 {df['coverage_f1'].mean():.4f} | max predict {df['wall_ms_predict'].max():.0f} ms"
+          f" | max score {df['wall_ms_score'].max():.0f} ms")
 
 
 if __name__ == "__main__":

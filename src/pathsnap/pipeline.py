@@ -3,6 +3,9 @@
     predict_trip(trip_dir)          -> prediction dict   (reads .track/.nodes/.arcs only)
     score_trip(trip_dir, prediction) -> metrics dict     (server-side; the only reader of .route)
 
+timings_ms["total"] is the wall clock of predict_trip with the model already loaded. Model
+loading (first call) and score_trip are separate: time them around the calls.
+
 The model bundle (artifacts/pathsnap_model.joblib, written by scripts/06_export.py) holds the
 trained classifier and every preprocessing / decoding setting, so training and serving cannot
 drift apart.
@@ -16,9 +19,10 @@ import joblib
 import numpy as np
 
 from . import config
-from .evaluate import best_per_point
+from .evaluate import arc_lengths_m, best_per_point, route_scores
 from .features import pair_features, prepare_trip
-from .hmm import HMMParams, RoadGraph, build_route, plausible_continuity, viterbi
+from .geo import Projector
+from .hmm import HMMParams, RoadGraph, build_route, plausible_continuity, segment_ids, viterbi
 from .io import load_route, load_trip
 from .labels import label_trip
 
@@ -100,12 +104,12 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
     """Run the full pipeline on one trip. `model` picks any saved model (default: the final one);
     `use_hmm=False` returns the classifier-only route, for side-by-side comparison;
     `offset_correction=False` disables the systematic-GPS-shift check (ablation)."""
-    b = bundle or load_model(model)
+    b = bundle or load_model(model)  # cached after the first call; warm it up at API startup
     hmm_params = b.get("hmm_params") or (load_bundle()["hmm_params"] if ARTIFACT_PATH.exists()
                                          else HMMParams().as_dict())
     trip_dir = Path(trip_dir)
     tm: dict[str, float] = {}
-    t = time.perf_counter()
+    t_start = t = time.perf_counter()
 
     trip = load_trip(trip_dir)
     tm["load"] = time.perf_counter() - t
@@ -120,6 +124,7 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
     tm["classifier"] = time.perf_counter() - t
     t = time.perf_counter()
     params = HMMParams(**hmm_params)
+    seg = segment_ids(ctx, params)
     if use_hmm:
         rows, graph = viterbi(ctx, prob, params)
     else:  # classifier only: best candidate of each point independently
@@ -128,10 +133,15 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
         if len(ctx.cands.obs):
             k, idx = best_per_point(ctx.cands.obs, prob)
             rows[k] = idx
-    pieces = build_route(ctx, graph, rows)
-    tm["hmm" if use_hmm else "route"] = time.perf_counter() - t
-    continuity = plausible_continuity(ctx, graph, rows)
+    tm["hmm" if use_hmm else "decode"] = time.perf_counter() - t
+    t = time.perf_counter()
+    pieces = build_route(ctx, graph, rows, seg)
+    tm["route"] = time.perf_counter() - t
+    t = time.perf_counter()
+    continuity, n_transitions = plausible_continuity(ctx, graph, rows, seg)
+    tm["continuity"] = time.perf_counter() - t
 
+    t = time.perf_counter()
     arc_of_row = ctx.cands.arc_id
     predicted = [int(arc_of_row[r]) if r >= 0 else None for r in rows]
     nodes = trip.nodes
@@ -141,7 +151,9 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
             continue
         seq = [int(trip.arcs[p[0], 0])] + [int(trip.arcs[a, 1]) for a in p]
         lines.append([[float(nodes[n, 0]), float(nodes[n, 1])] for n in seq])
-    tm["total"] = sum(tm.values())
+    gps = trip.track[:, :2].tolist()
+    tm["response"] = time.perf_counter() - t
+    tm["total"] = time.perf_counter() - t_start  # wall clock of this call (model already loaded)
     return {
         "trip_id": trip.trip_id,
         "n_points": trip.n_points,
@@ -149,11 +161,13 @@ def predict_trip(trip_dir, bundle: dict | None = None, model: str | None = None,
         "route_arcs": [a for p in pieces for a in p],
         "geojson": {"type": "FeatureCollection", "features": [
             {"type": "Feature", "properties": {"layer": "gps"},
-             "geometry": {"type": "MultiPoint", "coordinates": trip.track[:, :2].tolist()}},
+             "geometry": {"type": "MultiPoint", "coordinates": gps}},
             {"type": "Feature", "properties": {"layer": "predicted_route"},
              "geometry": {"type": "MultiLineString", "coordinates": lines}},
         ]},
         "route_continuity": continuity,
+        "n_transitions": n_transitions,
+        "n_route_pieces": len(pieces),
         "n_unmatched": int(sum(a is None for a in predicted)),
         "timings_ms": {k: round(v * 1000, 1) for k, v in tm.items()},
         "model": b["model_name"],
@@ -166,12 +180,14 @@ def score_trip(trip_dir, prediction: dict) -> dict:
     """Server-side evaluation against the trip's .route. Never call this before predicting."""
     trip_dir = Path(trip_dir)
     trip = load_trip(trip_dir)
+    keys = ("top1_accuracy", "coverage_precision", "coverage_recall", "coverage_f1", "sequence_precision",
+            "sequence_recall", "sequence_f1", "route_mismatch")
     try:
         ref_route = load_route(trip_dir)
     except FileNotFoundError:
-        return {"top1_accuracy": None, "route_precision": None, "route_recall": None, "route_f1": None,
-                "route_mismatch": None, "route_continuity": prediction.get("route_continuity"),
-                "n_points_scored": 0, "note": "no reference route (.route) for this trip; prediction only"}
+        return {**dict.fromkeys(keys), "route_continuity": prediction.get("route_continuity"),
+                "n_transitions": prediction.get("n_transitions"), "n_points_scored": 0,
+                "note": "no reference route (.route) for this trip; prediction only"}
     off = prediction.get("offset_correction") or {}
     shift = (off.get("dx_m", 0.0), off.get("dy_m", 0.0)) if off.get("applied") else (0.0, 0.0)
     lab = label_trip(trip, ref_route, shift=shift)
@@ -179,25 +195,13 @@ def score_trip(trip_dir, prediction: dict) -> dict:
     pred = np.array([-1 if a is None else a for a in prediction["predicted_arcs"]], dtype=np.int64)
     top1 = float(np.mean(pred[rel] == lab["arc_id"][rel])) if rel.any() else float("nan")
 
-    pred_set = set(prediction["route_arcs"])
-    ref_set = set(int(a) for a in ref_route)
-    ids = np.array(sorted(pred_set | ref_set), dtype=np.int64)
-    from .geo import Projector
     proj = Projector.for_track(trip.track)
-    x1, y1 = proj.to_xy(trip.nodes[trip.arcs[ids, 0], 0], trip.nodes[trip.arcs[ids, 0], 1])
-    x2, y2 = proj.to_xy(trip.nodes[trip.arcs[ids, 1], 0], trip.nodes[trip.arcs[ids, 1], 1])
-    length = dict(zip(ids.tolist(), np.hypot(x2 - x1, y2 - y1).tolist()))
-    L = lambda s: sum(length[a] for a in s)
-    inter = L(pred_set & ref_set)
-    prec = inter / max(L(pred_set), 1e-9)
-    rec = inter / max(L(ref_set), 1e-9)
+    length = arc_lengths_m(trip, proj, list(prediction["route_arcs"]) + ref_route.tolist())
     out = {
         "top1_accuracy": top1,
-        "route_precision": prec,
-        "route_recall": rec,
-        "route_f1": 2 * prec * rec / max(prec + rec, 1e-9),
-        "route_mismatch": (L(pred_set - ref_set) + L(ref_set - pred_set)) / max(L(ref_set), 1e-9),
+        **route_scores(prediction["route_arcs"], ref_route.tolist(), length),
         "route_continuity": prediction.get("route_continuity"),
+        "n_transitions": prediction.get("n_transitions"),
         "n_points_scored": int(rel.sum()),
         "reference_median_dist_m": float(np.median(lab["dist"])),
     }
