@@ -284,5 +284,31 @@
     "test_strict_adjacency": 0.7962025292676091,
     "test_coverage_f1": 0.8902224562957606,
     "test_sequence_f1": 0.7259824669396326
+  },
+  "lightgbm_tuned": {
+    "model": "lightgbm_tuned",
+    "family": "Boosting (Bayesian-tuned)",
+    "train_point_frac": 1.0,
+    "cv_macro_f1_mean": 0.95982193042204,
+    "cv_macro_f1_std": 0.007857787902621038,
+    "cv_top1": 0.9365461447369877,
+    "cv_top1_fold_std": 0.013046506131638016,
+    "cv_log_loss": 0.04924119759486033,
+    "test_top1": 0.9322636282862071,
+    "test_macro_f1": 0.9572565904766703,
+    "test_precision": 0.9269447220322937,
+    "test_recall": 0.9213718109577582,
+    "test_log_loss": 0.04900670004940063,
+    "test_plausible_continuity": 0.9042814289610035,
+    "test_strict_adjacency": 0.8330245441180949,
+    "fit_s_full": 74.62808179999956,
+    "infer_ms_per_1k_points": 232.87172233824762,
+    "seed": 352,
+    "run": "20261118-120016",
+    "file": "lightgbm_tuned.joblib",
+    "size_mb": 9.62,
+    "features": 29,
+    "test_coverage_f1": 0.922348254240581,
+    "test_sequence_f1": 0.7990542043425861
   }
 }

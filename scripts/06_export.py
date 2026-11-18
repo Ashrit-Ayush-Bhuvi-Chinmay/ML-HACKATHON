@@ -29,6 +29,9 @@ def main() -> None:
     ap.add_argument("--model", default="lightgbm")
     ap.add_argument("--params-json", default=None, help="tuned hyperparameters (overrides the spec)")
     ap.add_argument("--hmm-summary", default=None, help="results/hmm/summary_<model>.csv with tuned decoder params")
+    ap.add_argument("--from-saved", default=None,
+                    help="reuse artifacts/models/<name>.joblib (the exact model whose metrics are in the "
+                         "comparison table) instead of refitting")
     args = ap.parse_args()
 
     spec = SPECS[args.model]
@@ -44,26 +47,34 @@ def main() -> None:
 
     P = pd.read_parquet(config.CACHE_DIR / "dataset" / "train_pairs.parquet")
     P = P[P["reliable"]].reset_index(drop=True)
-    X, y = P[FEATURES].to_numpy(), P["y"].to_numpy()
     t0 = time.perf_counter()
-    model = spec.build(params, config.SEED)
-    if hasattr(model, "fit_grouped"):
-        codes = {t: i for i, t in enumerate(sorted(P["trip_id"].unique()))}
-        model.fit_grouped(X, y, point_keys(P["trip_id"].map(codes).to_numpy(), P["obs"].to_numpy()))
+    if args.from_saved:
+        saved = joblib.load(config.REPO_ROOT / "artifacts" / "models" / f"{args.from_saved}.joblib")
+        model, params = saved["model"], saved["params"]
+        assert saved["features"] == FEATURES, "saved model uses a different feature set"
+        print(f"reusing saved model {args.from_saved} (no refit)")
     else:
-        model.fit(X, y)
+        X, y = P[FEATURES].to_numpy(), P["y"].to_numpy()
+        model = spec.build(params, config.SEED)
+        if hasattr(model, "fit_grouped"):
+            codes = {t: i for i, t in enumerate(sorted(P["trip_id"].unique()))}
+            model.fit_grouped(X, y, point_keys(P["trip_id"].map(codes).to_numpy(), P["obs"].to_numpy()))
+        else:
+            model.fit(X, y)
     fit_s = time.perf_counter() - t0
+    if hasattr(model, "set_params") and "device" in getattr(model, "get_params", lambda: {})():
+        model.set_params(device="cpu")  # GPU-trained XGBoost: serve on CPU (API laptop may lack CUDA)
     if hasattr(model, "net_"):
         model.net_.cpu()
     comp = config.RESULTS_DIR / "models" / "model_comparison.csv"
     metrics = {}
     if comp.exists():
         c = pd.read_csv(comp)
-        hit = c[c["model"] == (args.model + "_tuned" if args.params_json else args.model)]
+        hit = c[c["model"] == (args.from_saved or (args.model + "_tuned" if args.params_json else args.model))]
         if len(hit):
             metrics = {k: v for k, v in hit.iloc[0].to_dict().items() if k != "config"}
     bundle = {
-        "model": model, "model_name": args.model, "kind": "classifier", "metrics": metrics,
+        "model": model, "model_name": args.from_saved or args.model, "kind": "classifier", "metrics": metrics,
         "model_params": params, "features": FEATURES,
         "candidate_radius": config.CAND_RADIUS, "candidate_k": config.CAND_K, "hmm_params": hmm_params,
         "label_max_dist": config.LABEL_MAX_DIST, "seed": config.SEED,
