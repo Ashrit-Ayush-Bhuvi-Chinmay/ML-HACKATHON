@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { ChevronLeft, ChevronRight, CircleX, Loader2, MousePointerClick, Play, Route as RouteIcon, Unplug } from 'lucide-react'
 import { ApiErrorNotice } from '@/components/common/ApiErrorNotice'
@@ -39,10 +39,15 @@ function Stat({ label, value, sub, hint }: { label: string; value: string; sub?:
 type RunFilter = 'all' | 'matched' | 'unmatched'
 type RunSort = 'order' | 'longest'
 
+/**
+ * Arc runs. The selected row is always the run containing the shared selected GPS point, so it
+ * stays in sync with the ribbon, map and inspector; the table follows it to the right page.
+ */
 function RunsTable({ runs, selected, onSelect }: { runs: ArcRun[]; selected: ArcRun | null; onSelect: (r: ArcRun) => void }) {
-  const [page, setPage] = useState(0)
   const [filter, setFilter] = useState<RunFilter>('all')
   const [sort, setSort] = useState<RunSort>('order')
+  const scroller = useRef<HTMLDivElement>(null)
+  const selectedRow = useRef<HTMLTableRowElement>(null)
 
   const indexed = useMemo(() => runs.map((r, i) => ({ ...r, n: i + 1 })), [runs])
   const list = useMemo(() => {
@@ -53,8 +58,25 @@ function RunsTable({ runs, selected, onSelect }: { runs: ArcRun[]; selected: Arc
   const matchedCount = runs.filter((r) => r.arc !== null).length
 
   const pages = Math.max(1, Math.ceil(list.length / PAGE))
-  const safePage = Math.min(page, pages - 1)
+  // Page follows the selection; a page chosen by hand holds until the selection, filter or sort changes.
+  const viewKey = `${selected?.start ?? 'none'}|${filter}|${sort}`
+  const selIdx = selected ? list.findIndex((r) => r.start === selected.start) : -1
+  const autoPage = selIdx >= 0 ? Math.floor(selIdx / PAGE) : 0
+  const [manual, setManual] = useState<{ page: number; key: string } | null>(null)
+  const safePage = Math.min(manual && manual.key === viewKey ? manual.page : autoPage, pages - 1)
+  const setPage = (p: number) => setManual({ page: p, key: viewKey })
   const slice = list.slice(safePage * PAGE, safePage * PAGE + PAGE)
+
+  // Keep the selected row visible inside the table's own scroll area (the page itself does not move).
+  useEffect(() => {
+    const c = scroller.current
+    const r = selectedRow.current
+    if (!c || !r) return
+    const header = 34
+    if (r.offsetTop < c.scrollTop + header || r.offsetTop + r.offsetHeight > c.scrollTop + c.clientHeight) {
+      c.scrollTop = Math.max(0, r.offsetTop - c.clientHeight / 2)
+    }
+  }, [selected?.start, safePage])
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -63,7 +85,7 @@ function RunsTable({ runs, selected, onSelect }: { runs: ArcRun[]; selected: Arc
           label="Filter runs"
           size="xs"
           value={filter}
-          onChange={(v) => (setFilter(v), setPage(0))}
+          onChange={setFilter}
           options={[
             { value: 'all', label: 'All', count: runs.length },
             { value: 'matched', label: 'Matched', count: matchedCount },
@@ -74,14 +96,14 @@ function RunsTable({ runs, selected, onSelect }: { runs: ArcRun[]; selected: Arc
           label="Sort runs"
           size="xs"
           value={sort}
-          onChange={(v) => (setSort(v), setPage(0))}
+          onChange={setSort}
           options={[
             { value: 'order', label: 'In order' },
             { value: 'longest', label: 'Longest' },
           ]}
         />
       </div>
-      <div className="scroll-thin max-h-[360px] overflow-y-auto border-t border-hairline">
+      <div ref={scroller} className="scroll-thin relative max-h-[360px] overflow-y-auto border-t border-hairline">
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-surface text-left text-[12px] text-ink-faint">
             <tr className="border-b border-hairline">
@@ -97,6 +119,7 @@ function RunsTable({ runs, selected, onSelect }: { runs: ArcRun[]; selected: Arc
               return (
                 <tr
                   key={r.start}
+                  ref={isSel ? selectedRow : undefined}
                   onClick={() => onSelect(r)}
                   className={cn('cursor-pointer border-b border-hairline/50 transition-colors last:border-0', isSel ? 'bg-route/[0.1]' : 'hover:bg-raised/60')}
                 >
@@ -209,7 +232,6 @@ export function RouteAnalysis() {
   const { selectedTrip, focusIndex, setFocusIndex } = useSession()
   const rec = useSelectedPrediction()
   const result = rec?.result
-  const [selectedRun, setSelectedRun] = useState<ArcRun | null>(null)
   const [showAllRoute, setShowAllRoute] = useState(false)
   const view = useMemo(() => (result ? viewOf(result.response) : null), [result])
 
@@ -227,12 +249,10 @@ export function RouteAnalysis() {
   const total = view.pointInfo(0).total
   const focusInfo = focusIndex !== null && focusIndex < total ? view.pointInfo(focusIndex) : null
   const focusArc = focusInfo?.arc ?? null
+  // Single source of truth: the selected run is the run containing the selected GPS point.
+  const selectedRun = focusInfo?.run ?? null
 
-  const selectRun = (r: ArcRun) => {
-    const same = selectedRun?.start === r.start
-    setSelectedRun(same ? null : r)
-    setFocusIndex(same ? null : r.start)
-  }
+  const selectRun = (r: ArcRun) => setFocusIndex(selectedRun?.start === r.start ? null : r.start)
 
   /** First GPS point matched to an arc, used when a route arc is clicked. */
   const firstPointOf = (arc: number) => response.predicted_arcs.indexOf(arc)
@@ -321,7 +341,7 @@ export function RouteAnalysis() {
                   <li key={`${i}-${arc}`}>
                     <button
                       type="button"
-                      onClick={() => first >= 0 && (setSelectedRun(null), setFocusIndex(first))}
+                      onClick={() => first >= 0 && setFocusIndex(first)}
                       disabled={first < 0}
                       title={first < 0 ? 'No GPS point was matched to this arc' : `Jump to GPS point ${first + 1}`}
                       className={cn(

@@ -409,7 +409,7 @@ export function RouteMap({
 
       {view && view.layers.refused.length > 0 && (
         <div className="absolute right-3 bottom-24 z-[500] max-w-[280px] rounded-md border border-warn/40 bg-surface/95 px-2.5 py-1.5 text-[12px] text-warn">
-          Not drawn: {view.layers.refused.join(', ')}. The UI never displays reference-route data.
+          Not drawn: {view.layers.refused.join(', ')}. The UI only draws named layers and never displays reference-route data.
         </div>
       )}
 

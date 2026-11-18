@@ -30,10 +30,17 @@ const KNOWN: Record<string, { label: string; kind: LayerKind; order: number }> =
 }
 
 /**
- * The reference route must never reach the UI (evaluation integrity rule).
- * If the backend ever sends a layer that looks like one, it is not drawn.
+ * The reference route must never reach the UI (evaluation integrity rule). This is defence in
+ * depth: the real guarantee is that the API never sends it. A layer whose name looks like
+ * reference / ground-truth data is not drawn, and neither is a feature without a layer name.
+ * "gt" is matched as a separate token so names such as gt_route or route_gt are caught.
  */
-const REFERENCE_PATTERN = /reference|ground[\s_-]?truth|\bgt\b|true[\s_-]?route|actual[\s_-]?route|\.route\b/i
+const REFERENCE_PATTERN = /reference|truth|(^|[^a-z])gt([^a-z]|$)|true[\s_-]?route|actual[\s_-]?route|\.route\b/i
+export const UNLABELLED = 'features without a layer name'
+
+export function isRefusedLayerName(name: string): boolean {
+  return REFERENCE_PATTERN.test(name)
+}
 
 function countVertices(f: Feature): number {
   const g = f.geometry
@@ -65,11 +72,16 @@ export function extractLayers(fc: FeatureCollection): ExtractedLayers {
   const groups = new Map<string, Feature[]>()
   const refused = new Set<string>()
   for (const f of fc.features) {
-    const key = typeof f.properties?.layer === 'string' && f.properties.layer ? f.properties.layer : 'unlabelled'
-    if (REFERENCE_PATTERN.test(key)) {
-      refused.add(key)
+    const name = typeof f.properties?.layer === 'string' ? f.properties.layer.trim() : ''
+    if (!name) {
+      refused.add(UNLABELLED)
       continue
     }
+    if (isRefusedLayerName(name)) {
+      refused.add(name)
+      continue
+    }
+    const key = name
     const list = groups.get(key) ?? []
     list.push(f)
     groups.set(key, list)

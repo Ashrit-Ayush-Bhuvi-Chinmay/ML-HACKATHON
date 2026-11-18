@@ -100,8 +100,10 @@ function Steps() {
 function BatchRunner() {
   const { trips, predictions, batch, runBatch, cancelBatch, health } = useSession()
   const now = useNow(batch.running, 250)
-  const online = health.status === 'online' && trips.status === 'ready'
   const ids = trips.trips.map((t) => t.trip_id)
+  // No batch while a single prediction is in flight: the batch would supersede it.
+  const singleRunning = ids.some((id) => predictions[id]?.status === 'running')
+  const online = health.status === 'online' && trips.status === 'ready' && !singleRunning
   const notRun = ids.filter((id) => tripStatus(predictions[id]) === 'not-run')
   const failed = ids.filter((id) => tripStatus(predictions[id]) === 'failed')
 
@@ -117,8 +119,9 @@ function BatchRunner() {
         </div>
         <div className="flex flex-wrap gap-2">
           {batch.running ? (
-            <Button variant="outline" onClick={cancelBatch}>
-              <Square className="size-3" /> Stop after current trip
+            <Button variant="outline" onClick={cancelBatch} disabled={batch.stopping}>
+              {batch.stopping ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3" />}
+              {batch.stopping ? 'Stopping after this trip' : 'Stop after current trip'}
             </Button>
           ) : (
             <>
@@ -164,7 +167,7 @@ function BatchRunner() {
             <span className="text-ink-muted">
               {batch.running ? (
                 <>
-                  Running {batch.label}
+                  {batch.stopping ? 'Stopping' : 'Running'} {batch.label}
                   {batch.current && (
                     <>
                       , now <span className="num text-[15px] font-semibold text-ink">{batch.current}</span>
@@ -381,6 +384,7 @@ function ResultsTable() {
                       <td colSpan={COLS.length + 6} className="px-4 pt-0 pb-2.5 text-[12.5px] text-err">
                         {rec.error.status ? `HTTP ${rec.error.status}: ` : ''}
                         {rec.error.message}
+                        {rec.result && <span className="text-ink-muted"> The values in this row are from the previous successful run.</span>}
                       </td>
                     </tr>
                   )}

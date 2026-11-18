@@ -55,6 +55,8 @@ export interface BatchState {
   startedAt: number | null
   finishedAt: number | null
   stopped: boolean
+  /** Stop was requested; the batch ends once the current trip finishes. */
+  stopping: boolean
 }
 
 const IDLE_BATCH: BatchState = {
@@ -68,6 +70,7 @@ const IDLE_BATCH: BatchState = {
   startedAt: null,
   finishedAt: null,
   stopped: false,
+  stopping: false,
 }
 
 interface SessionValue {
@@ -130,48 +133,59 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const controllers = useRef(new Map<string, AbortController>())
   const batchCancelled = useRef(false)
   const inBatch = useRef(false)
+  /** Bumped when the API address changes; work started under an older epoch is discarded. */
+  const epoch = useRef(0)
   const healthRef = useRef(health)
+  const tripsStatusRef = useRef(trips.status)
   useEffect(() => {
     healthRef.current = health
-  }, [health])
-
-  // ---- health -------------------------------------------------------------
-  const refreshHealth = useCallback(async () => {
-    setHealthChecking(true)
-    const t0 = performance.now()
-    try {
-      const data = await getHealth()
-      setHealth({ status: 'online', data, checkedAt: Date.now(), latencyMs: performance.now() - t0 })
-    } catch (e) {
-      setHealth({ status: 'offline', error: e as ApiError, checkedAt: Date.now() })
-    } finally {
-      setHealthChecking(false)
-    }
-  }, [])
+    tripsStatusRef.current = trips.status
+  }, [health, trips.status])
 
   // ---- trips --------------------------------------------------------------
   const loadTrips = useCallback(async () => {
+    const myEpoch = epoch.current
+    tripsStatusRef.current = 'loading'
     setTrips((t) => ({ status: 'loading', trips: t.trips }))
     try {
       const res = await getTrips()
+      if (myEpoch !== epoch.current) return
       setTrips({ status: 'ready', trips: res.trips, loadedAt: Date.now() })
     } catch (e) {
+      if (myEpoch !== epoch.current) return
       setTrips((t) => ({ status: 'error', trips: t.trips, error: e as ApiError }))
     }
   }, [])
 
-  // Initial check + polling. Re-runs when the API address changes.
-  useEffect(() => {
-    void refreshHealth()
-    const id = window.setInterval(() => void refreshHealth(), HEALTH_POLL_MS)
-    return () => window.clearInterval(id)
-  }, [refreshHealth, apiUrl])
+  // ---- health -------------------------------------------------------------
+  const refreshHealth = useCallback(async () => {
+    const myEpoch = epoch.current
+    setHealthChecking(true)
+    const t0 = performance.now()
+    try {
+      const data = await getHealth()
+      if (myEpoch !== epoch.current) return
+      setHealth({ status: 'online', data, checkedAt: Date.now(), latencyMs: performance.now() - t0 })
+      // Load trips as soon as the backend answers, and again after an outage or a failed load.
+      const ts = tripsStatusRef.current
+      if (ts === 'idle' || ts === 'error') void loadTrips()
+    } catch (e) {
+      if (myEpoch !== epoch.current) return
+      setHealth({ status: 'offline', error: e as ApiError, checkedAt: Date.now() })
+    } finally {
+      if (myEpoch === epoch.current) setHealthChecking(false)
+    }
+  }, [loadTrips])
 
-  // Load trips as soon as the backend is reachable, and reload if it came back after an outage.
-  const online = health.status === 'online'
+  // Polling: first check on the next tick, then every HEALTH_POLL_MS. Restarts when the API address changes.
   useEffect(() => {
-    if (online && (trips.status === 'idle' || trips.status === 'error')) void loadTrips()
-  }, [online, trips.status, loadTrips])
+    const first = window.setTimeout(() => void refreshHealth(), 0)
+    const id = window.setInterval(() => void refreshHealth(), HEALTH_POLL_MS)
+    return () => {
+      window.clearTimeout(first)
+      window.clearInterval(id)
+    }
+  }, [refreshHealth, apiUrl])
 
   const selectTrip = useCallback((id: string | null) => {
     setSelectedTripId(id)
@@ -187,13 +201,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // ---- prediction ---------------------------------------------------------
   const runPrediction = useCallback(async (tripId: string): Promise<RunOutcome> => {
     controllers.current.get(tripId)?.abort()
+    const myEpoch = epoch.current
     const controller = new AbortController()
     controllers.current.set(tripId, controller)
     const startedAt = Date.now()
     setPredictions((p) => ({ ...p, [tripId]: { ...p[tripId], status: 'running', startedAt, error: undefined } }))
     const t0 = performance.now()
+    // A newer run of the same trip, or an API address change, makes this run stale: drop its outcome.
+    const stale = () => myEpoch !== epoch.current || controllers.current.get(tripId) !== controller
     try {
       const { value, warnings } = await postPredict(tripId, controller.signal)
+      if (stale()) return 'cancelled'
       const h = healthRef.current
       const result: PredictionResult = {
         response: value,
@@ -209,6 +227,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return 'success'
     } catch (e) {
       const err = e as ApiError
+      if (stale()) return 'cancelled'
       setPredictions((p) => ({ ...p, [tripId]: { ...p[tripId], status: 'error', startedAt, error: err } }))
       if (!inBatch.current) {
         if (err.kind === 'cancelled') toast('info', `Prediction cancelled for trip ${tripId}`)
@@ -226,29 +245,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const runBatch = useCallback(
     async (tripIds: string[], label: string) => {
-      if (tripIds.length === 0) return
+      if (tripIds.length === 0 || inBatch.current) return
+      const myEpoch = epoch.current
+      const live = () => myEpoch === epoch.current
       batchCancelled.current = false
       inBatch.current = true
       setBatch({ ...IDLE_BATCH, running: true, label, queue: tripIds, startedAt: Date.now() })
       let ok = 0
       let failed = 0
-      for (let i = 0; i < tripIds.length; i++) {
-        if (batchCancelled.current) break
-        const id = tripIds[i]
-        setBatch((b) => ({ ...b, current: id }))
-        const outcome = await runPrediction(id)
-        if (outcome === 'success') ok++
-        else if (outcome === 'error') failed++
-        setBatch((b) => ({
-          ...b,
-          done: i + 1,
-          succeeded: outcome === 'success' ? [...b.succeeded, id] : b.succeeded,
-          failed: outcome === 'error' ? [...b.failed, id] : b.failed,
-        }))
+      try {
+        for (let i = 0; i < tripIds.length; i++) {
+          if (batchCancelled.current || !live()) break
+          const id = tripIds[i]
+          setBatch((b) => ({ ...b, current: id }))
+          // A failed trip is recorded and the batch moves on to the next one.
+          const outcome = await runPrediction(id)
+          if (!live()) break
+          if (outcome === 'success') ok++
+          else if (outcome === 'error') failed++
+          setBatch((b) => ({
+            ...b,
+            done: i + 1,
+            succeeded: outcome === 'success' ? [...b.succeeded, id] : b.succeeded,
+            failed: outcome === 'error' ? [...b.failed, id] : b.failed,
+          }))
+        }
+      } finally {
+        if (live()) inBatch.current = false
       }
-      inBatch.current = false
-      setBatch((b) => ({ ...b, running: false, current: null, finishedAt: Date.now(), stopped: batchCancelled.current }))
-      const summary = `${ok} succeeded, ${failed} failed${batchCancelled.current ? ', stopped early' : ''}.`
+      if (!live()) return
+      const stopped = batchCancelled.current
+      setBatch((b) => ({ ...b, running: false, current: null, finishedAt: Date.now(), stopped, stopping: false }))
+      const summary = `${ok} succeeded, ${failed} failed${stopped ? ', stopped early' : ''}.`
       toast(failed ? 'error' : 'success', `Finished running ${label}`, summary, 6000)
     },
     [runPrediction],
@@ -262,18 +290,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     )
   }, [trips, runBatch])
 
+  /** Stops the batch after the trip currently being predicted; that request is not aborted. */
   const cancelBatch = useCallback(() => {
     batchCancelled.current = true
-    setBatch((b) => {
-      if (b.current) controllers.current.get(b.current)?.abort()
-      return b
-    })
+    setBatch((b) => (b.running ? { ...b, stopping: true } : b))
   }, [])
 
   // ---- API address --------------------------------------------------------
   const setApiUrl = useCallback((url: string | null) => {
     saveApiBaseUrl(url)
     const next = resolveApiBaseUrl()
+    // Invalidate all in-flight work from the previous backend, including a running batch.
+    epoch.current++
+    batchCancelled.current = true
+    inBatch.current = false
+    tripsStatusRef.current = 'idle'
     for (const c of controllers.current.values()) c.abort()
     controllers.current.clear()
     setApiBaseUrl(next.url)
@@ -284,6 +315,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setBatch(IDLE_BATCH)
     setTrips({ status: 'idle', trips: [] })
     setHealth({ status: 'checking' })
+    setHealthChecking(false)
     setFocusIndex(null)
   }, [])
 
