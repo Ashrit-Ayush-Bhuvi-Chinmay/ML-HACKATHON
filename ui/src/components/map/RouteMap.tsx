@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type L from 'leaflet'
 import { Crosshair, Expand, Layers, MapPinOff, Minus, Play, Plus, Shrink } from 'lucide-react'
 import { GeoJSON, MapContainer, TileLayer } from 'react-leaflet'
@@ -8,7 +8,7 @@ import type { PredictOptions } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { TILE_ATTRIBUTION, TILE_DARKEN, TILE_URL } from '@/config'
-import type { MapLayer } from '@/lib/geo'
+import { routeDifference, segmentSet, type MapLayer } from '@/lib/geo'
 import { fmtInt, fmtPct } from '@/lib/format'
 import { viewOf } from '@/lib/predictionView'
 import { cn } from '@/lib/utils'
@@ -206,6 +206,8 @@ export function RouteMap({
   const extraLayers = layers.filter((l) => l.kind === 'extra')
   const roadLayer = layers.find((l) => l.kind === 'road')
   const stats = view?.stats
+  // Segments of the current route, to highlight only where an overlaid run goes elsewhere.
+  const baseSegments = useMemo(() => (routeLayer ? segmentSet(routeLayer.data) : new Set<string>()), [routeLayer])
 
   const toggle = (key: string) => (v: boolean) => setHidden((h) => ({ ...h, [key]: !v }))
 
@@ -296,22 +298,29 @@ export function RouteMap({
           const layer = viewOf(run.response).layers.layers.find((l) => l.kind === 'route')
           if (!layer) return null
           const key = runKeyOf(run)
+          const diff = routeDifference(layer.data, baseSegments)
           return (
-            <GeoJSON
-              key={`compare-${key}`}
-              data={layer.data as GeoJSON.FeatureCollection}
-              interactive={false}
-              pane={PANES.overlay}
-              style={() => ({
-                color: colorFor(key),
-                weight: 3,
-                opacity: 0.35,
-                dashArray: '6 5',
-                lineCap: 'round',
-                lineJoin: 'round',
-              })}
-              onEachFeature={(_f, l) => l.bindTooltip(runLabelOf(run), { sticky: true, className: 'ps-tooltip' })}
-            />
+            <Fragment key={`compare-wrap-${key}`}>
+              <GeoJSON
+                key={`compare-${key}`}
+                data={layer.data as GeoJSON.FeatureCollection}
+                interactive={false}
+                pane={PANES.overlay}
+                style={() => ({ color: colorFor(key), weight: 3, opacity: 0.45, dashArray: '6 5', lineCap: 'round', lineJoin: 'round' })}
+                onEachFeature={(_f, l) => l.bindTooltip(runLabelOf(run), { sticky: true, className: 'ps-tooltip' })}
+              />
+              {diff.segments > 0 && (
+                <GeoJSON
+                  key={`compare-diff-${key}-${diff.segments}`}
+                  data={diff.data as GeoJSON.FeatureCollection}
+                  pane={PANES.highlight}
+                  style={() => ({ color: colorFor(key), weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' })}
+                  onEachFeature={(_f, l) =>
+                    l.bindTooltip(`${runLabelOf(run)}: goes where the current route does not`, { sticky: true, className: 'ps-tooltip' })
+                  }
+                />
+              )}
+            </Fragment>
           )
         })}
 

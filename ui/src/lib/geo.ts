@@ -6,6 +6,62 @@ import type { Feature, FeatureCollection, PredictResponse, Position } from '@/ap
 
 export type LayerKind = 'gps' | 'route' | 'road' | 'extra'
 
+/** Direction-independent key of one line segment (consecutive vertex pair). */
+function segmentKey(a: Position, b: Position): string {
+  const ka = `${a[0].toFixed(6)},${a[1].toFixed(6)}`
+  const kb = `${b[0].toFixed(6)},${b[1].toFixed(6)}`
+  return ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`
+}
+
+function linesOf(fc: FeatureCollection): Position[][] {
+  const out: Position[][] = []
+  for (const f of fc.features) {
+    const g = f.geometry
+    if (!g) continue
+    if (g.type === 'LineString') out.push(g.coordinates)
+    else if (g.type === 'MultiLineString') out.push(...g.coordinates)
+  }
+  return out
+}
+
+/** Every segment drawn by a route layer, independent of direction. */
+export function segmentSet(fc: FeatureCollection): Set<string> {
+  const set = new Set<string>()
+  for (const line of linesOf(fc)) for (let i = 1; i < line.length; i++) set.add(segmentKey(line[i - 1], line[i]))
+  return set
+}
+
+/**
+ * The parts of a comparison route that the current route does not use: consecutive segments
+ * not in `base`, merged into lines. Driving the same road in the other direction is not a visible
+ * difference on a map and is not included (the "differs on N points" count covers it).
+ */
+export function routeDifference(fc: FeatureCollection, base: Set<string>): { data: FeatureCollection; segments: number } {
+  const lines: Position[][] = []
+  let segments = 0
+  for (const line of linesOf(fc)) {
+    let cur: Position[] = []
+    for (let i = 1; i < line.length; i++) {
+      if (base.has(segmentKey(line[i - 1], line[i]))) {
+        if (cur.length) lines.push(cur)
+        cur = []
+      } else {
+        if (!cur.length) cur.push(line[i - 1])
+        cur.push(line[i])
+        segments++
+      }
+    }
+    if (cur.length) lines.push(cur)
+  }
+  return {
+    data: {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: { layer: 'compare_difference' }, geometry: { type: 'MultiLineString', coordinates: lines } }],
+    },
+    segments,
+  }
+}
+
 export interface MapLayer {
   key: string
   label: string
