@@ -103,7 +103,7 @@ def main() -> None:
     df = pd.DataFrame(rows)
     out = config.RESULTS_DIR / "pipeline"
     out.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out / f"rehearsal_{args.model}.csv", index=False)
+    df.to_csv(out / f"rehearsal_{bundle['model_name']}.csv", index=False)
     w = df["n_points_scored"] / df["n_points_scored"].sum()
     print(f"\npoint-weighted top1 {np.sum(w * df['top1_accuracy']):.4f} | mean sequence F1 {df['sequence_f1'].mean():.4f}"
           f" | mean coverage F1 {df['coverage_f1'].mean():.4f} | max predict {df['wall_ms_predict'].max():.0f} ms"
