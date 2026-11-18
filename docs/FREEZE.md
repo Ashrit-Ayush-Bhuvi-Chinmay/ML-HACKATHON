@@ -1,10 +1,10 @@
 # Freeze record
 
-Generated 2026-11-18T12:06:03 on the `core-ml` branch, before the evaluator
+Generated 2026-11-18T12:06:35 on the `core-ml` branch, before the evaluator
 test folder was received. Nothing below may change after the evaluator data arrives; the API only
 points `PATHSNAP_EVAL_DIR` at that folder.
 
-- Code commit at freeze time: `614349d6f450bf5b5d3d27d0a9be0eb671ad8872` (with uncommitted changes in src/scripts/artifacts!)
+- Code commit at freeze time: `c74bcec051857c1ae82f49784300f9b072917558`
 - Final bundle: `artifacts/pathsnap_model.joblib`  SHA-256 `af093e19ce884a0060b1e2827de318b1eaad84eafb7516139d6e29ff0c87766c`
 - Model: `lightgbm_tuned`; trained on train split, 78 trips, 1,429,277 candidate rows
 - Model parameters: `{"n_estimators": 800, "learning_rate": 0.020297676378643766, "num_leaves": 250, "min_child_samples": 94, "subsample": 0.8199094425189012, "subsample_freq": 1, "colsample_bytree": 0.957522308602883, "reg_lambda": 2.1822435418877868e-08, "reg_alpha": 2.7440553357911863}`
