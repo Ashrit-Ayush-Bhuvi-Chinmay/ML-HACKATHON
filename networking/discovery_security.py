@@ -58,6 +58,7 @@ def create_announcement(host, port):
     announcement = {
         "service": "PathSnap",
         "version": 1,
+        "scheme": "http",
         "host": host,
         "port": port,
         "timestamp": int(time.time()),
@@ -76,7 +77,7 @@ def verify_announcement(data):
         return False
 
     required = {
-        "service", "version", "host",
+        "service", "version", "scheme", "host",
         "port", "timestamp", "nonce", "signature"
     }
 
@@ -87,6 +88,9 @@ def verify_announcement(data):
         return False
 
     if data["version"] != 1:
+        return False
+
+    if data["scheme"] != "http":
         return False
 
     if not isinstance(data["host"], str):

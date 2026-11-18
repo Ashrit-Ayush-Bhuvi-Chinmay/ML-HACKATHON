@@ -7,6 +7,7 @@ import ipaddress
 
 from networking.discovery_security import (
     create_announcement,
+    get_discovery_key,
     verify_announcement
 )
 
@@ -22,10 +23,16 @@ ANNOUNCEMENT_INTERVAL = 5
 _stop_event = threading.Event()
 
 
-def start_broadcaster(https_port=8000):
+def start_broadcaster(port=8000):
     """
-    Broadcast authenticated PathSnap announcements.
+    Broadcast authenticated PathSnap announcements over UDP.
+
+    The API is plain HTTP for the demo, so the announcement carries scheme "http".
+    Raises RuntimeError when DISCOVERY_SECRET is missing or malformed, before any thread
+    starts, so the caller can continue without discovery.
     """
+
+    get_discovery_key()  # validate the secret up front
 
     local_ip = get_local_ipv4()
 
@@ -51,7 +58,7 @@ def start_broadcaster(https_port=8000):
 
                 announcement = create_announcement(
                     local_ip,
-                    https_port
+                    port
                 )
 
                 message = json.dumps(
@@ -140,8 +147,12 @@ def listen_for_servers(timeout=30):
                 if data["host"] != sender[0]:
                     continue
 
+                # The demo API is plain HTTP; the announcement must say so.
+                if data.get("scheme") != "http":
+                    continue
+
                 server_url = (
-                    f"https://{data['host']}:{data['port']}"
+                    f"http://{data['host']}:{data['port']}"
                 )
 
                 discovered[server_url] = {
@@ -150,13 +161,12 @@ def listen_for_servers(timeout=30):
                     "url": server_url
                 }
 
-                print("PathSnap server discovered:")
-                print(server_url)
+                print(f"PathSnap server found: {server_url}", flush=True)
 
             except socket.timeout:
                 continue
 
-            except (ValueError, UnicodeDecodeError):
+            except (ValueError, KeyError, UnicodeDecodeError):
                 continue
 
     finally:
