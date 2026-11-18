@@ -1,0 +1,37 @@
+{
+  "generated": "2026-11-18T13:29:14",
+  "eval_dir": "C:\\Users\\ashri\\Documents\\SEM 5\\ML\\ML_HACKATHON\\Provided Material\\evaluator_test",
+  "model_sha256": "af093e19ce884a0060b1e2827de318b1eaad84eafb7516139d6e29ff0c87766c",
+  "code_commit": "6d3a1a2d04aad1b7872ac7559afdd406830c9758",
+  "n_trips": 10,
+  "n_errors": 0,
+  "variants": {
+    "final_system": {
+      "top1_point_weighted": 0.9584215183432554,
+      "top1_mean_over_trips": 0.9529399999999999,
+      "sequence_f1_mean": 0.9833700000000001,
+      "coverage_f1_mean": 0.98926,
+      "route_continuity_mean": 0.9925200000000001,
+      "route_mismatch_mean": 0.02225,
+      "max_predict_ms": 3853
+    },
+    "final_model_no_hmm": {
+      "top1_point_weighted": 0.9476834274665447,
+      "top1_mean_over_trips": 0.94085,
+      "sequence_f1_mean": 0.8310700000000001,
+      "coverage_f1_mean": 0.91096,
+      "route_continuity_mean": 0.9306300000000001,
+      "route_mismatch_mean": 0.21156999999999998,
+      "max_predict_ms": 1841
+    },
+    "distance_baseline_no_hmm": {
+      "top1_point_weighted": 0.48312297359181805,
+      "top1_mean_over_trips": 0.5194500000000001,
+      "sequence_f1_mean": 0.45196000000000003,
+      "coverage_f1_mean": 0.7007,
+      "route_continuity_mean": 0.5956800000000001,
+      "route_mismatch_mean": 0.8716700000000002,
+      "max_predict_ms": 780
+    }
+  }
+}
