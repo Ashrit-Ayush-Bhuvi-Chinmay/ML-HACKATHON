@@ -38,6 +38,9 @@ FEATURES = [
     "log_dt_prev", "log_dt_next", "jitter",
     "n_cands", "dist_gap", "ctx_gap", "cos_gap",
 ]
+LONG_HEADING_FEATURES = ["cos_heading_long", "heading_long_valid", "cos_gap_long"]
+# feature set v1 = before the long-range heading was added (kept for the ablation / UI history)
+FEATURES_V1 = [f for f in FEATURES if f not in LONG_HEADING_FEATURES]
 
 
 @dataclass

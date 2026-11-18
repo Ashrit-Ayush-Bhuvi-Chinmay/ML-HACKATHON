@@ -18,6 +18,7 @@ import json
 import time
 from datetime import datetime
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupKFold
@@ -57,8 +58,9 @@ def fit_predict(spec, P_tr: pd.DataFrame, P_pred: pd.DataFrame, seed: int, rng):
         t0 = time.perf_counter()
         prob = model.predict_proba_grouped(P_pred["dist"].to_numpy(), P_pred["_key"].to_numpy())
         return prob, model, fit_s, time.perf_counter() - t0
+    feats = spec.features or FEATURES
     idx = subsample_rows(tr, spec.train_point_frac, rng)
-    X = tr[FEATURES].to_numpy()[idx]
+    X = tr[feats].to_numpy()[idx]
     y = tr["y"].to_numpy()[idx]
     model = spec.build(spec.params, seed)
     t0 = time.perf_counter()
@@ -69,10 +71,33 @@ def fit_predict(spec, P_tr: pd.DataFrame, P_pred: pd.DataFrame, seed: int, rng):
     fit_s = time.perf_counter() - t0
     t0 = time.perf_counter()
     if hasattr(model, "predict_proba_grouped"):
-        prob = model.predict_proba_grouped(P_pred[FEATURES].to_numpy(), P_pred["_key"].to_numpy())
+        prob = model.predict_proba_grouped(P_pred[feats].to_numpy(), P_pred["_key"].to_numpy())
     else:
-        prob = model.predict_proba(P_pred[FEATURES].to_numpy())[:, 1]
+        prob = model.predict_proba(P_pred[feats].to_numpy())[:, 1]
     return prob, model, fit_s, time.perf_counter() - t0
+
+
+def save_model(spec, model, row: dict) -> None:
+    """Save the exact model whose student-test metrics are reported, and register it, so the
+    API/UI can run (and show the results of) every model we tried, not only the winner."""
+    art = config.REPO_ROOT / "artifacts" / "models"
+    art.mkdir(parents=True, exist_ok=True)
+    if hasattr(model, "net_"):
+        model.net_.cpu()  # GPU-trained torch weights saved on CPU: loadable on a laptop without CUDA
+    bundle = {"model": model, "model_name": spec.name, "family": spec.family, "params": spec.params,
+              "features": spec.features or FEATURES,
+              "kind": "distance_gaussian" if spec.build is None else "classifier",
+              "candidate_radius": config.CAND_RADIUS, "candidate_k": config.CAND_K,
+              "metrics": row, "seed": config.SEED}
+    path = art / f"{spec.name}.joblib"
+    joblib.dump(bundle, path, compress=3)
+    size_mb = path.stat().st_size / 1e6
+    reg_path = art / "registry.json"
+    reg = json.loads(reg_path.read_text()) if reg_path.exists() else {}
+    reg[spec.name] = {k: row[k] for k in row if k != "config"} | {"file": path.name, "size_mb": round(size_mb, 2),
+                                                                   "features": len(bundle["features"])}
+    reg_path.write_text(json.dumps(reg, indent=2, default=str))
+    print(f"  saved {path.name} ({size_mb:.1f} MB)", flush=True)
 
 
 def metrics(P: pd.DataFrame, Q: pd.DataFrame, prob: np.ndarray) -> dict:
@@ -182,8 +207,9 @@ def run_one(name, P_tr, Q_tr, P_te, Q_te, folds, res_dir, pred_dir, table, table
             "fit_s_full": fit_s, "infer_ms_per_1k_points": 1e6 * pred_s / n_te_points,
             "seed": config.SEED, "run": stamp,
         }
+        save_model(spec, model, row)
         run = {"row": row, "folds": fold_rows, "cv_oof": cv, "test": te,
-               "features": FEATURES, "n_folds": N_FOLDS, "candidate_radius": config.CAND_RADIUS,
+               "features": spec.features or FEATURES, "n_folds": N_FOLDS, "candidate_radius": config.CAND_RADIUS,
                "candidate_k": config.CAND_K, "label_max_dist": config.LABEL_MAX_DIST}
         if spec.epoch_history:
             if hasattr(model, "history_"):  # torch: per-epoch train / validation loss

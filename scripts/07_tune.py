@@ -36,8 +36,9 @@ def space(trial: optuna.Trial, model: str) -> dict:
             "subsample": trial.suggest_float("subsample", 0.5, 1.0),
             "subsample_freq": 1,
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.4, 1.0),
-            "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
-            "reg_alpha": trial.suggest_float("reg_alpha", 1e-3, 10.0, log=True),
+            # lower bound ~0 so the untuned configuration (no L1/L2) is inside the space
+            "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
         }
     if model == "xgboost":
         return {
@@ -99,7 +100,10 @@ def main() -> None:
         pruner=optuna.pruners.MedianPruner(n_startup_trials=6, n_warmup_steps=0))
     # trial 0 = the untuned configuration, so the search record starts from the baseline
     if len(study.trials) == 0:
-        study.enqueue_trial({k: v for k, v in spec.params.items() if k not in ("subsample_freq",)})
+        untuned = {k: v for k, v in spec.params.items() if k not in ("subsample_freq",)}
+        if args.model == "lightgbm":
+            untuned |= {"reg_lambda": 1e-8, "reg_alpha": 1e-8}  # LightGBM default is 0
+        study.enqueue_trial(untuned)
     t0 = time.perf_counter()
     study.optimize(objective, n_trials=args.trials, timeout=args.timeout_min * 60)
     print(f"\n{len(study.trials)} trials in {(time.perf_counter() - t0) / 60:.1f} min; best top1 {study.best_value:.4f}")

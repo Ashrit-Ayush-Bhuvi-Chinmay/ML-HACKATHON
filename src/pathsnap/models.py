@@ -24,6 +24,8 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from .features import FEATURES_V1
+
 
 @dataclass
 class ModelSpec:
@@ -33,6 +35,7 @@ class ModelSpec:
     build: Callable[[dict, int], object] | None  # None = special-cased baseline
     train_point_frac: float = 1.0
     epoch_history: bool = False
+    features: list[str] | None = None  # None = the current full feature set
 
 
 class DistanceGaussian:
@@ -124,3 +127,7 @@ SPECS: dict[str, ModelSpec] = {
     "catboost": ModelSpec("catboost", "Boosting (ordered boosting, GPU)", {
         "iterations": 1500, "learning_rate": 0.08, "depth": 8, "l2_leaf_reg": 3.0}, _catboost),
 }
+# Ablation: the same LightGBM on feature set v1 (no long-range heading).
+SPECS["lightgbm_v1feats"] = ModelSpec(
+    "lightgbm_v1feats", "Boosting (feature set v1: no long-range heading)",
+    dict(SPECS["lightgbm"].params), _lgb, features=FEATURES_V1)

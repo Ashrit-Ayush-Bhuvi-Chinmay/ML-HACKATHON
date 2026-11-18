@@ -163,6 +163,7 @@ class TorchScorer:
 
         dev = self._device()
         Xs = ((X - self.mu_) / self.sd_).astype(np.float32)
+        self.net_.to(dev)  # saved models live on the CPU so they load anywhere
         self.net_.eval()
         with torch.no_grad():
             X_t = torch.from_numpy(Xs).to(dev)

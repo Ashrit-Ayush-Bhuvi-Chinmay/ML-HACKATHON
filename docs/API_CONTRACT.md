@@ -25,15 +25,36 @@ both sides work without waiting for each other.
 ```
 
 ### `GET /trips`
-Trip ids are found by **scanning the folder in the `PATHSNAP_EVAL_DIR` env var** at startup
-(one sub-folder per trip, same layout as `Student folder/student_test`). **Never hardcode trip
-ids**: the evaluator's ten trips are ones we have never seen.
+Trip ids are found by **scanning the folder in the `PATHSNAP_EVAL_DIR` env var** with
+`pathsnap.io.list_trips(EVAL_DIR)`. It handles both one-sub-folder-per-trip (like
+`student_test`) and all files flat in one folder, and returns one path per trip; pass that
+path to `predict_trip`. **Never hardcode trip ids**: the evaluator's ten trips are ones we have
+never seen. The evaluator folder arrives after lunch. Copy it to laptop 1 and point
+`PATHSNAP_EVAL_DIR` at it, but don't open or analyse it (evaluation data must stay untouched).
 ```json
 {"trips": [{"trip_id": "00000000", "n_points": 3958}, {"trip_id": "00000007", "n_points": 1206}]}
 ```
 
+### `GET /models`
+Every model we trained, including the weaker ones, with its recorded metrics. Use it for a
+leaderboard and a model picker in the UI. `"default"` is the final model.
+```json
+{"models": [
+  {"name": "default", "model": "lightgbm", "description": "final model + HMM", "cv_top1": 0.93, "test_top1": 0.93},
+  {"name": "distance_gaussian", "family": "Classic baseline (distance only)", "cv_top1": 0.55, "test_top1": 0.53},
+  {"name": "logreg", "family": "Linear", "cv_top1": 0.92, "test_top1": 0.92}
+]}
+```
+
+### `GET /experiments`
+Past runs for a "history" view: the model comparison on the current and the earlier feature
+set, the HMM ablation (classifier-only vs + HMM vs classic HMM) and every Bayesian-optimisation
+trial. Returns `pathsnap.pipeline.experiment_history()` as-is (lists of table rows).
+
 ### `POST /predict`
-Request: `{"trip_id": "00000000"}`
+Request: `{"trip_id": "00000000"}`, optionally with `"model": "<name from /models>"` (default
+`"default"`) and `"hmm": false` to show the classifier-only route. Running the same trip with a
+weak model, then the final model, makes the improvement visible during the demo.
 
 Response:
 ```json
@@ -71,15 +92,18 @@ Response:
 
 ## Calling the model
 
-The API only needs two functions:
+The API only needs these functions, all in `pathsnap.pipeline`:
 
 ```python
-from pathsnap.pipeline import predict_trip   # (trip_dir: str) -> dict
-from pathsnap.evaluate import score_trip     # (trip_dir: str, prediction: dict) -> dict (metrics)
+from pathsnap.pipeline import predict_trip, score_trip, list_models, experiment_history
+
+pred = predict_trip(trip_dir, model=None, use_hmm=True)  # model=None -> the final model
+metrics = score_trip(trip_dir, pred)                      # server-side only: reads .route
 ```
 
-`predict_trip` returns every response key above except `metrics`. Until the real pipeline is
-merged, put this stub in `api/stub_pipeline.py` and import from it instead:
+`predict_trip` returns every `/predict` response key except `metrics` (plus `model` and `hmm`).
+Call `predict_trip` once at startup (warm-up) so the first evaluator request isn't slow.
+Until the real pipeline is merged, put this stub in `api/stub_pipeline.py` and import from it:
 
 ```python
 import time

@@ -53,8 +53,18 @@ def main() -> None:
     else:
         model.fit(X, y)
     fit_s = time.perf_counter() - t0
+    if hasattr(model, "net_"):
+        model.net_.cpu()
+    comp = config.RESULTS_DIR / "models" / "model_comparison.csv"
+    metrics = {}
+    if comp.exists():
+        c = pd.read_csv(comp)
+        hit = c[c["model"] == (args.model + "_tuned" if args.params_json else args.model)]
+        if len(hit):
+            metrics = {k: v for k, v in hit.iloc[0].to_dict().items() if k != "config"}
     bundle = {
-        "model": model, "model_name": args.model, "model_params": params, "features": FEATURES,
+        "model": model, "model_name": args.model, "kind": "classifier", "metrics": metrics,
+        "model_params": params, "features": FEATURES,
         "candidate_radius": config.CAND_RADIUS, "candidate_k": config.CAND_K, "hmm_params": hmm_params,
         "label_max_dist": config.LABEL_MAX_DIST, "seed": config.SEED,
         "trained_on": f"train split, {P['trip_id'].nunique()} trips, {len(P):,} candidate rows",
