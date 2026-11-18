@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { ChartColumn, CheckCircle2, CircleDashed, CircleX, FlaskConical, Loader2, Play, Route, Square } from 'lucide-react'
 import { ApiErrorNotice } from '@/components/common/ApiErrorNotice'
@@ -103,6 +103,17 @@ export function PredictionPanel() {
   const [model, setModel] = useState('default')
   const [hmm, setHmm] = useState(true)
 
+  const rec = selectedTrip ? predictions[selectedTrip.trip_id] : undefined
+  const result = rec?.result
+
+  // Keep the picker in step with the result on screen, including runs started from the map.
+  useEffect(() => {
+    if (!result?.response.model) return
+    const deployed = health.status === 'online' ? health.data.model : null
+    setModel(result.response.model === deployed ? 'default' : result.response.model)
+    if (typeof result.response.hmm === 'boolean') setHmm(result.response.hmm)
+  }, [result, health])
+
   if (!selectedTrip) {
     return (
       <div className="px-4 py-6 text-[13px] text-ink-muted">
@@ -115,9 +126,7 @@ export function PredictionPanel() {
     )
   }
 
-  const rec = predictions[selectedTrip.trip_id]
   const running = rec?.status === 'running'
-  const result = rec?.result
   const offline = health.status !== 'online'
   const view = result ? viewOf(result.response) : null
   const placeholder = view?.placeholder ?? false
@@ -177,6 +186,9 @@ export function PredictionPanel() {
               hint="Points with a non-null predicted arc. A count of the prediction, not an accuracy metric."
             />
             <Fact label="Route arcs" value={fmtInt(result.response.route_arcs.length)} hint="Length of the predicted route, split into pieces at GPS gaps." />
+            {typeof result.response.n_route_pieces === 'number' && (
+              <Fact label="Route pieces" value={fmtInt(result.response.n_route_pieces)} hint="The route is split into separate lines at GPS gaps." />
+            )}
             <Fact label="Model" value={result.response.model ?? result.model ?? '—'} hint="Model name reported with this prediction." />
             <Fact label="Decode" value={result.response.hmm === false ? 'Classifier only' : 'HMM + Viterbi'} hint="Whether HMM/Viterbi decoding produced this route." />
             <Fact label="Server time" value={fmtMs(result.response.timings_ms.total)} hint="timings_ms.total reported by the API." />

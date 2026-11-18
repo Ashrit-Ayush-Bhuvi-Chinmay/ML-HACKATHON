@@ -15,10 +15,18 @@ export const PANES = {
   road: 'ps-road',
   extra: 'ps-extra',
   gps: 'ps-gps',
+  overlay: 'ps-overlay',
   route: 'ps-route',
   highlight: 'ps-highlight',
 } as const
-const PANE_Z: Record<string, number> = { 'ps-road': 390, 'ps-extra': 395, 'ps-gps': 410, 'ps-route': 420, 'ps-highlight': 430 }
+const PANE_Z: Record<string, number> = {
+  'ps-road': 390,
+  'ps-extra': 395,
+  'ps-gps': 410,
+  'ps-overlay': 415,
+  'ps-route': 420,
+  'ps-highlight': 430,
+}
 
 export function MapPanes() {
   const map = useMap()

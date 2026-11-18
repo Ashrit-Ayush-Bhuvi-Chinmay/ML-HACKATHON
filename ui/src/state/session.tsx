@@ -45,6 +45,18 @@ export function runLabelOf(result: PredictionResult): string {
   return `${model} · ${result.response.hmm === false ? 'no HMM' : 'HMM'}`
 }
 
+/** Does a stored run correspond to the requested model + decoder? "default" means the deployed model. */
+export function matchesRunOptions(
+  result: PredictionResult,
+  options: PredictOptions,
+  deployedModel?: string | null,
+): boolean {
+  const requested = options.model && options.model !== 'default' ? options.model : (deployedModel ?? null)
+  const wantsHmm = options.hmm !== false
+  const modelOk = !requested || (result.response.model ?? result.model) === requested
+  return modelOk && (result.response.hmm !== false) === wantsHmm
+}
+
 export interface PredictionRecord {
   status: 'running' | 'success' | 'error'
   startedAt: number
@@ -71,8 +83,9 @@ export interface BatchState {
   stopping: boolean
 }
 
-const IDLE_BATCH: BatchState = {
-  running: false,
+const NO_KEYS: string[] = []
+
+const IDLE_BATCH: BatchState = {  running: false,
   label: '',
   queue: [],
   done: 0,
@@ -109,10 +122,17 @@ interface SessionValue {
   selectedTrip: TripSummary | null
 
   predictions: Record<string, PredictionRecord>
-  runPrediction: (tripId: string, options?: PredictOptions, reuse?: boolean) => Promise<RunOutcome>
+  runPrediction: (tripId: string, options?: PredictOptions, reuse?: boolean, notify?: boolean) => Promise<RunOutcome>
   cancelPrediction: (tripId: string) => void
   /** Every stored successful run of a trip, newest first, keyed by model + decoder. */
   runsForTrip: (tripId: string) => PredictionResult[]
+  /** The stored run for a given model + decoder, if it exists. */
+  findStoredRun: (tripId: string, options?: PredictOptions) => PredictionResult | null
+  /** Run (or reuse) a model without replacing the current result; used for map overlays. */
+  fetchRun: (tripId: string, options?: PredictOptions) => Promise<PredictionResult>
+  /** Run keys selected as translucent overlays, per trip. */
+  overlayKeysFor: (tripId: string) => string[]
+  setOverlayKeysFor: (tripId: string, keys: string[]) => void
 
   batch: BatchState
   /** Runs the given trips one after another (sequential keeps the API log readable). */
@@ -149,6 +169,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [storedTripId, setSelectedTripId] = useState<string | null>(readSelected)
   const [predictions, setPredictions] = useState<Record<string, PredictionRecord>>({})
   const [runs, setRuns] = useState<Record<string, PredictionResult[]>>({})
+  const [overlayKeys, setOverlayKeys] = useState<Record<string, string[]>>({})
   const [batch, setBatch] = useState<BatchState>(IDLE_BATCH)
   const [focusIndex, setFocusIndex] = useState<number | null>(null)
 
@@ -246,15 +267,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // ---- prediction ---------------------------------------------------------
-  const runPrediction = useCallback(async (tripId: string, options: PredictOptions = {}, reuse = false): Promise<RunOutcome> => {
+  const findStoredRun = useCallback((tripId: string, options: PredictOptions = {}) => {
+    const h = healthRef.current
+    const deployed = h.status === 'online' ? h.data.model : null
+    return (runsRef.current[tripId] ?? []).find((result) => matchesRunOptions(result, options, deployed)) ?? null
+  }, [])
+
+  /** Run (or reuse) a model in the background; the result is stored but does not replace the current one. */
+  const fetchRun = useCallback(
+    async (tripId: string, options: PredictOptions = {}): Promise<PredictionResult> => {
+      const stored = findStoredRun(tripId, options)
+      if (stored) return stored
+      const t0 = performance.now()
+      const { value, warnings } = await postPredict(tripId, options)
+      const h = healthRef.current
+      const result: PredictionResult = {
+        response: value,
+        warnings,
+        receivedAt: Date.now(),
+        roundTripMs: performance.now() - t0,
+        model: value.model ?? (h.status === 'online' ? h.data.model : null),
+      }
+      const key = runKeyOf(result)
+      const previous = runsRef.current[tripId] ?? []
+      const nextRuns = { ...runsRef.current, [tripId]: [result, ...previous.filter((r) => runKeyOf(r) !== key)] }
+      runsRef.current = nextRuns
+      setRuns(nextRuns)
+      return result
+    },
+    [findStoredRun],
+  )
+
+  const runPrediction = useCallback(async (tripId: string, options: PredictOptions = {}, reuse = false, notify = true): Promise<RunOutcome> => {
     if (reuse) {
-      const wantsDefault = !options.model || options.model === 'default'
-      const wantsHmm = options.hmm !== false
-      const stored = (runsRef.current[tripId] ?? []).find(
-        (r) =>
-          (wantsDefault || (r.response.model ?? r.model) === options.model) &&
-          (r.response.hmm !== false) === wantsHmm,
-      )
+      const stored = findStoredRun(tripId, options)
       if (stored) {
         setPredictions((p) => ({ ...p, [tripId]: { status: 'success', startedAt: Date.now(), result: stored } }))
         return 'success'
@@ -283,12 +329,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       setPredictions((p) => ({ ...p, [tripId]: { status: 'success', startedAt, result } }))
       // Keep every run of this trip, newest first, one entry per model + decoder.
-      setRuns((all) => {
-        const key = runKeyOf(result)
-        const previous = all[tripId] ?? []
-        return { ...all, [tripId]: [result, ...previous.filter((r) => runKeyOf(r) !== key)] }
-      })
-      if (!inBatch.current) {
+      const key = runKeyOf(result)
+      const previous = runsRef.current[tripId] ?? []
+      const nextRuns = {
+        ...runsRef.current,
+        [tripId]: [result, ...previous.filter((r) => runKeyOf(r) !== key)],
+      }
+      runsRef.current = nextRuns
+      setRuns(nextRuns)
+      if (!inBatch.current && notify) {
         toast('success', `Prediction received for trip ${tripId}`, `${runLabelOf(result)} · server ${fmtMs(value.timings_ms.total)}, round trip ${fmtMs(result.roundTripMs)}.`)
       }
       return 'success'
@@ -296,7 +345,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const err = e as ApiError
       if (stale()) return 'cancelled'
       setPredictions((p) => ({ ...p, [tripId]: { ...p[tripId], status: 'error', startedAt, error: err } }))
-      if (!inBatch.current) {
+      if (!inBatch.current && notify) {
         if (err.kind === 'cancelled') toast('info', `Prediction cancelled for trip ${tripId}`)
         else toast('error', `Prediction failed for trip ${tripId}`, err.message)
       }
@@ -304,7 +353,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } finally {
       if (controllers.current.get(tripId) === controller) controllers.current.delete(tripId)
     }
-  }, [])
+  }, [findStoredRun])
 
   const cancelPrediction = useCallback((tripId: string) => {
     controllers.current.get(tripId)?.abort()
@@ -380,6 +429,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Results from a different backend would be misleading; start clean.
     setPredictions({})
     setRuns({})
+    setOverlayKeys({})
     setBatch(IDLE_BATCH)
     setTrips({ status: 'idle', trips: [] })
     setModels([])
@@ -397,6 +447,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const selectedTripId = selectedTrip?.trip_id ?? null
 
   const runsForTrip = useCallback((tripId: string) => runs[tripId] ?? [], [runs])
+  const overlayKeysFor = useCallback((tripId: string) => overlayKeys[tripId] ?? NO_KEYS, [overlayKeys])
+  const setOverlayKeysFor = useCallback((tripId: string, keys: string[]) => {
+    setOverlayKeys((all) => ({ ...all, [tripId]: keys }))
+  }, [])
 
   const isStubModel = health.data?.model?.toLowerCase() === 'stub'
 
@@ -420,6 +474,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     runPrediction,
     cancelPrediction,
     runsForTrip,
+    findStoredRun,
+    fetchRun,
+    overlayKeysFor,
+    setOverlayKeysFor,
     batch,
     runBatch,
     runAllTrips,

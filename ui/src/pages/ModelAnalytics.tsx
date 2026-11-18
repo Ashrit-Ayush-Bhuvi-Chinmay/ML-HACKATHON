@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
-import { ArrowDown, ArrowUp, ChartColumn } from 'lucide-react'
+import { Link, useNavigate } from 'react-router'
+import { ArrowDown, ArrowUp, ChartColumn, MapPin } from 'lucide-react'
 import { ApiError } from '@/api/client'
 import { getExperiments } from '@/api/services'
-import type { ExperimentRow, ExperimentsResponse, ModelInfo } from '@/api/types'
+import type { ExperimentRow, ExperimentsResponse, ModelInfo, PredictOptions } from '@/api/types'
 import { EmptyState } from '@/components/common/EmptyState'
 import { InfoTip } from '@/components/common/InfoTip'
 import { Notice } from '@/components/common/Notice'
@@ -17,8 +17,9 @@ import { TripContextBar } from '@/components/trips/TripContextBar'
 import { Button } from '@/components/ui/button'
 import { fmtClock, fmtInt, fmtMs, fmtPct } from '@/lib/format'
 import { viewOf } from '@/lib/predictionView'
+import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-import { useSelectedPrediction, useSession } from '@/state/session'
+import { runKeyOf, useSelectedPrediction, useSession } from '@/state/session'
 
 function OutputFacts({ items }: { items: { label: string; value: string; sub: string; hint: string }[] }) {
   return (
@@ -48,7 +49,19 @@ const ABLATION_LABELS: Record<string, string> = {
   distance_only: 'Distance only',
 }
 
-function Leaderboard({ models, status }: { models: ModelInfo[]; status: 'idle' | 'loading' | 'ready' | 'error' }) {
+function Leaderboard({
+  models,
+  status,
+  onShowOnMap,
+  pending,
+  canShow,
+}: {
+  models: ModelInfo[]
+  status: 'idle' | 'loading' | 'ready' | 'error'
+  onShowOnMap: (name: string) => void
+  pending: string | null
+  canShow: boolean
+}) {
   const [dir, setDir] = useState<1 | -1>(-1)
   const rows = useMemo(
     () => [...models].sort((a, b) => ((a.test_top1 ?? -1) - (b.test_top1 ?? -1)) * dir),
@@ -91,6 +104,7 @@ function Leaderboard({ models, status }: { models: ModelInfo[]; status: 'idle' |
             <th className={th}>Test Seq F1</th>
             <th className={th}>Test Coverage F1</th>
             <th className={th}>Infer / 1k pts</th>
+            <th className="py-2 pr-4 pl-3 text-right font-medium">Map</th>
           </tr>
         </thead>
         <tbody>
@@ -111,6 +125,19 @@ function Leaderboard({ models, status }: { models: ModelInfo[]; status: 'idle' |
                 <td className={cn(td, num(m.test_sequence_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(m.test_sequence_f1))}</td>
                 <td className={cn(td, num(m.test_coverage_f1) === null ? 'text-ink-faint' : 'text-ink')}>{fmtPct(num(m.test_coverage_f1))}</td>
                 <td className={cn(td, 'text-ink-muted')}>{fmtMs(num(m.infer_ms_per_1k_points))}</td>
+                <td className="py-2 pr-4 pl-3 text-right">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    disabled={!canShow || pending !== null}
+                    onClick={() => onShowOnMap(m.name)}
+                    title={canShow ? 'Run this model on the selected trip and show it on the map' : 'The API is offline'}
+                    aria-label={`Show ${m.name} on the map`}
+                  >
+                    <MapPin />
+                    {pending === m.name ? 'Running…' : 'Show on map'}
+                  </Button>
+                </td>
               </tr>
             )
           })}
@@ -122,20 +149,17 @@ function Leaderboard({ models, status }: { models: ModelInfo[]; status: 'idle' |
 
 function Ablation({ tables }: { tables: Record<string, ExperimentRow[]> }) {
   const keys = useMemo(() => Object.keys(tables), [tables])
-  const [model, setModel] = useState('')
-  useEffect(() => {
-    if (!keys.length) return
-    if (!keys.includes(model)) setModel(keys.includes('lightgbm_tuned') ? 'lightgbm_tuned' : keys[0])
-  }, [keys, model])
+  const [chosen, setChosen] = useState('')
+  const activeModel = keys.includes(chosen) ? chosen : keys.includes('lightgbm_tuned') ? 'lightgbm_tuned' : (keys[0] ?? '')
 
   const rows = useMemo(() => {
-    const list = [...(tables[model] ?? [])]
+    const list = [...(tables[activeModel] ?? [])]
     const rank = (v: unknown) => {
       const i = ABLATION_ORDER.indexOf(String(v))
       return i === -1 ? ABLATION_ORDER.length : i
     }
     return list.sort((a, b) => rank(a.variant) - rank(b.variant))
-  }, [tables, model])
+  }, [tables, activeModel])
 
   if (!keys.length) return <p className="px-4 py-4 text-[13px] text-ink-muted">The API returned no HMM ablation tables.</p>
 
@@ -149,8 +173,8 @@ function Ablation({ tables }: { tables: Record<string, ExperimentRow[]> }) {
           <Segmented
             label="Ablation model"
             size="xs"
-            value={model}
-            onChange={setModel}
+            value={activeModel}
+            onChange={setChosen}
             options={keys.map((k) => ({ value: k, label: k }))}
           />
         </div>
@@ -189,25 +213,78 @@ function Ablation({ tables }: { tables: Record<string, ExperimentRow[]> }) {
 }
 
 export function ModelAnalytics() {
-  const { predictions, trips, selectTrip, models, modelsStatus, apiUrl } = useSession()
+  const {
+    predictions,
+    trips,
+    selectTrip,
+    models,
+    modelsStatus,
+    apiUrl,
+    selectedTripId,
+    health,
+    fetchRun,
+    overlayKeysFor,
+    setOverlayKeysFor,
+    runPrediction,
+  } = useSession()
   const rec = useSelectedPrediction()
   const result = rec?.result
   const view = useMemo(() => (result ? viewOf(result.response) : null), [result])
   const [sessionView, setSessionView] = useState<'chart' | 'table'>('chart')
   const [experiments, setExperiments] = useState<ExperimentsResponse | null>(null)
   const [experimentsError, setExperimentsError] = useState<string | null>(null)
+  const [pendingModel, setPendingModel] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const controller = new AbortController()
-    setExperimentsError(null)
     getExperiments(controller.signal)
-      .then(setExperiments)
+      .then((data) => {
+        setExperiments(data)
+        setExperimentsError(null)
+      })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.kind === 'cancelled') return
         setExperimentsError(e instanceof Error ? e.message : 'Could not load GET /experiments.')
       })
     return () => controller.abort()
   }, [apiUrl])
+
+  const showModelOnMap = async (name: string) => {
+    if (!selectedTripId) {
+      toast('info', 'Choose a trip first', 'Select a trip in the trip explorer, then add a model to its map.')
+      return
+    }
+    if (health.status !== 'online') return
+
+    const options: PredictOptions = { model: name === 'default' ? 'default' : name, hmm: true }
+    const current = predictions[selectedTripId]?.result
+    setPendingModel(name)
+    try {
+      if (!current) {
+        // Nothing on the map yet: this run becomes the current route.
+        const outcome = await runPrediction(selectedTripId, options)
+        if (outcome !== 'success') throw new Error('The prediction failed; the trip explorer shows the reason.')
+      } else {
+        const run = await fetchRun(selectedTripId, options)
+        if (runKeyOf(run) === runKeyOf(current)) {
+          toast('info', 'That run is already the current route', 'Pick another model to overlay it.')
+        } else {
+          const key = runKeyOf(run)
+          const keys = [key, ...overlayKeysFor(selectedTripId).filter((k) => k !== key)]
+          setOverlayKeysFor(selectedTripId, keys)
+          toast('success', `${name === 'default' ? 'Default model' : name} added to the map`, 'It is drawn behind the current route.')
+        }
+      }
+      navigate('/trips')
+    } catch (e) {
+      if (!(e instanceof ApiError && e.kind === 'cancelled')) {
+        toast('error', 'Could not run this model', e instanceof Error ? e.message : 'Unknown error.')
+      }
+    } finally {
+      setPendingModel(null)
+    }
+  }
 
   const rows: (SessionRow & { n: number; scored: number | null })[] = useMemo(
     () =>
@@ -368,7 +445,13 @@ export function ModelAnalytics() {
         description="Every model saved on Laptop 1, from GET /models. Sorted by student-test Top-1; the deployed model is highlighted."
         flush
       >
-        <Leaderboard models={models} status={modelsStatus} />
+        <Leaderboard
+          models={models}
+          status={modelsStatus}
+          onShowOnMap={(name) => void showModelOnMap(name)}
+          pending={pendingModel}
+          canShow={health.status === 'online'}
+        />
       </Panel>
 
       <Panel
