@@ -1,0 +1,68 @@
+{
+  "project_name": "PathSnap",
+  "dataset": {
+    "archive": "data/raw/Student folder.zip",
+    "available_splits": {
+      "train_trips": 80,
+      "student_test_trips": 10,
+      "evaluator_test_trips": 0
+    },
+    "student_test_role": "comparison_only; never use for fitting, feature selection, calibration, or tuning",
+    "route_semantics": "Each .route file is a chronological arc-ID sequence, not one arc per GPS point.",
+    "coordinate_order": "longitude, latitude"
+  },
+  "split": {
+    "group_column": "trip_id",
+    "seed": 42,
+    "train_trip_count": 80,
+    "student_test_trip_count": 10,
+    "evaluator_test_trip_count": 0,
+    "group_kfold_folds": 5,
+    "student_test_role": "comparison_only"
+  },
+  "features": {
+    "candidate_radius_m": 250.0,
+    "max_candidates": 128,
+    "feature_count": 15,
+    "feature_columns": [
+      "distance_m",
+      "candidate_rank",
+      "along_fraction",
+      "heading_delta_deg",
+      "speed_mps",
+      "arc_length_m",
+      "from_degree",
+      "to_degree",
+      "node_degree_sum",
+      "candidate_count",
+      "nearest_candidate_gap_m",
+      "previous_projection_delta_m",
+      "connects_previous_candidate",
+      "elapsed_s",
+      "gap_reset"
+    ],
+    "projection_rule": "Project each trip to WGS84 UTM metres using the UTM zone of its median longitude and the latitude hemisphere."
+  },
+  "random_seeds": {
+    "python": 42,
+    "numpy": 42,
+    "scikit_learn": 42,
+    "pytorch": 42,
+    "xgboost": 42,
+    "optuna": 42
+  },
+  "label_quality": {
+    "alternative_method": "route-position Viterbi",
+    "skip_penalty_m_per_skipped_arc": 15.0,
+    "backward_penalty_m_per_route_position": 150.0,
+    "apply_alternative_labels": false,
+    "student_test_use": "diagnostics only; no parameter selection"
+  },
+  "training": {
+    "seed": 42,
+    "metric": "observation_top1_accuracy",
+    "cv": "GroupKFold by trip_id, 5 folds",
+    "student_test_role": "comparison_only; no fitting or tuning",
+    "negative_sampling": "Keep all positive candidates and at most 12 near/random negatives per point; use inverse-sampling weights."
+  }
+}
